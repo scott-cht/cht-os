@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Shell } from '@/components/shell';
@@ -17,19 +17,32 @@ const CONDITION_GRADES: { value: ConditionGrade; label: string; color: string }[
   { value: 'poor', label: 'Poor', color: 'red' },
 ];
 
+// Calculate days on demo
+function daysBetween(date1: string): number {
+  const d1 = new Date(date1);
+  const now = new Date();
+  const diffTime = now.getTime() - d1.getTime();
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+}
+
 export default function InventoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [item, setItem] = useState<InventoryItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<Partial<InventoryItem>>({});
+  
+  // Convert to sale state
+  const [sellingImages, setSellingImages] = useState<string[]>([]);
 
   useEffect(() => {
     async function fetchItem() {
@@ -126,6 +139,73 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  // Handle selling photos upload
+  const handleSellingPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const imageData = reader.result as string;
+        setSellingImages((prev) => [...prev, imageData]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = ''; // Reset input
+  };
+
+  // Remove selling photo
+  const removeSellingPhoto = (index: number) => {
+    setSellingImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Convert demo to sale
+  const handleConvertToSale = async () => {
+    if (!formData.sale_price || formData.sale_price <= 0) {
+      setError('Please set a sale price before converting to sale');
+      return;
+    }
+
+    if (!formData.condition_grade) {
+      setError('Please select a condition grade');
+      return;
+    }
+
+    setIsConverting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/inventory/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          listing_status: 'ready_to_sell',
+          selling_images: sellingImages,
+          image_urls: sellingImages.length > 0 ? sellingImages : formData.registration_images || [],
+          converted_to_sale_at: new Date().toISOString(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setItem(data.item);
+        setFormData(data.item);
+        // Refresh page to show updated status
+        router.refresh();
+      }
+    } catch (err) {
+      setError('Failed to convert to sale');
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <Shell title="Loading...">
@@ -151,10 +231,23 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
 
   if (!item) return null;
 
+  // Determine subtitle based on listing type and status
+  const getSubtitle = () => {
+    if (item.listing_type === 'new') return 'New Retail';
+    if (item.listing_type === 'trade_in') return 'Trade-In';
+    if (item.listing_type === 'ex_demo') {
+      if (item.listing_status === 'on_demo') return 'Demo Unit · On Display';
+      if (item.listing_status === 'ready_to_sell') return 'Ex-Demo · Ready to Sell';
+      if (item.listing_status === 'sold') return 'Ex-Demo · Sold';
+      return 'Ex-Demo';
+    }
+    return '';
+  };
+
   return (
     <Shell 
       title={`${item.brand} ${item.model}`}
-      subtitle={item.listing_type === 'new' ? 'New Retail' : item.listing_type === 'trade_in' ? 'Trade-In' : 'Ex-Demo'}
+      subtitle={getSubtitle()}
     >
       {/* Error message */}
       {error && (
@@ -194,6 +287,161 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
             ))}
           </div>
         </div>
+      )}
+
+      {/* Demo Status Banner */}
+      {item.listing_type === 'ex_demo' && item.listing_status === 'on_demo' && (
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl">🏷️</span>
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-semibold text-blue-700 dark:text-blue-400">Currently On Demo</h3>
+                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400">
+                  Not for Sale
+                </span>
+              </div>
+              <p className="text-sm text-blue-600 dark:text-blue-500 mb-2">
+                This unit is on demonstration display and has not been listed for sale yet.
+              </p>
+              <div className="flex flex-wrap gap-4 text-sm">
+                {item.demo_start_date && (
+                  <div>
+                    <span className="text-blue-500">Demo Start:</span>{' '}
+                    <span className="font-medium text-blue-700 dark:text-blue-400">
+                      {new Date(item.demo_start_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                )}
+                {item.demo_start_date && (
+                  <div>
+                    <span className="text-blue-500">Days on Demo:</span>{' '}
+                    <span className="font-medium text-blue-700 dark:text-blue-400">
+                      {daysBetween(item.demo_start_date)} days
+                    </span>
+                  </div>
+                )}
+                {item.cost_price && (
+                  <div>
+                    <span className="text-blue-500">Cost Price:</span>{' '}
+                    <span className="font-medium text-blue-700 dark:text-blue-400">
+                      ${item.cost_price.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Convert to Sale Section (for demo items on demo) */}
+      {item.listing_type === 'ex_demo' && item.listing_status === 'on_demo' && (
+        <Card className="mb-6">
+          <div className="p-4 border-b border-zinc-200 dark:border-zinc-700 bg-emerald-50 dark:bg-emerald-900/20">
+            <h2 className="font-semibold text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Ready to Sell This Demo?
+            </h2>
+          </div>
+          <div className="p-4 space-y-4">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleSellingPhotoUpload}
+              className="hidden"
+            />
+
+            {/* Selling Photos */}
+            <div>
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                Condition Photos <span className="text-zinc-400 font-normal">(show current condition)</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {sellingImages.map((img, idx) => (
+                  <div key={idx} className="relative">
+                    <img src={img} alt={`Condition ${idx + 1}`} className="w-20 h-20 object-cover rounded-lg" />
+                    <button
+                      onClick={() => removeSellingPhoto(idx)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-20 h-20 border-2 border-dashed border-zinc-300 dark:border-zinc-600 rounded-lg flex flex-col items-center justify-center text-zinc-400 hover:border-zinc-400 hover:text-zinc-500 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span className="text-xs mt-1">Add</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Condition & Price */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Condition *</label>
+                <div className="grid grid-cols-5 gap-1">
+                  {CONDITION_GRADES.map((grade) => (
+                    <button
+                      key={grade.value}
+                      onClick={() => setFormData({ ...formData, condition_grade: grade.value })}
+                      className={`py-2 text-xs rounded transition-colors ${
+                        formData.condition_grade === grade.value
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                      }`}
+                    >
+                      {grade.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Sale Price *</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span>
+                  <Input
+                    type="number"
+                    value={formData.sale_price || ''}
+                    onChange={(e) => setFormData({ ...formData, sale_price: parseFloat(e.target.value) || 0 })}
+                    placeholder="Enter sale price"
+                    className="pl-7"
+                  />
+                </div>
+                {item.cost_price && formData.sale_price && formData.sale_price > 0 && (
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Margin: ${(formData.sale_price - item.cost_price).toLocaleString()} ({Math.round(((formData.sale_price - item.cost_price) / item.cost_price) * 100)}%)
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Convert Button */}
+            <Button
+              onClick={handleConvertToSale}
+              isLoading={isConverting}
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              disabled={!formData.sale_price || !formData.condition_grade}
+            >
+              Convert to Sale Listing
+            </Button>
+            <p className="text-xs text-center text-zinc-500">
+              This will make the item available for sync to Shopify
+            </p>
+          </div>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -349,15 +597,25 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
                 Save Changes
               </Button>
               
-              <Button
-                onClick={handleSync}
-                isLoading={isSyncing}
-                variant="secondary"
-                className="w-full"
-                disabled={item.sync_status === 'syncing'}
-              >
-                {item.sync_status === 'synced' ? 'Re-Sync' : 'Sync to Platforms'}
-              </Button>
+              {/* Only show sync button if not on_demo */}
+              {item.listing_status !== 'on_demo' && (
+                <Button
+                  onClick={handleSync}
+                  isLoading={isSyncing}
+                  variant="secondary"
+                  className="w-full"
+                  disabled={item.sync_status === 'syncing'}
+                >
+                  {item.sync_status === 'synced' ? 'Re-Sync' : 'Sync to Platforms'}
+                </Button>
+              )}
+
+              {/* Show note for demo items */}
+              {item.listing_status === 'on_demo' && (
+                <p className="text-xs text-center text-zinc-500 py-2">
+                  Convert to sale first to enable sync
+                </p>
+              )}
 
               <Button
                 onClick={handleDelete}

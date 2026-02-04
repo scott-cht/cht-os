@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
       .from('inventory_items')
       .insert({
         listing_type: body.listing_type,
+        listing_status: body.listing_status || 'ready_to_sell', // Default for new/trade-in
         brand: body.brand,
         model: body.model,
         serial_number: body.serial_number || null,
@@ -37,8 +38,15 @@ export async function POST(request: NextRequest) {
         sale_price: body.sale_price,
         condition_grade: body.condition_grade || null,
         condition_report: body.condition_report || null,
+        // Demo-specific fields
+        demo_start_date: body.demo_start_date || null,
+        demo_location: body.demo_location || null,
+        // Media
         image_urls: body.image_urls || [],
+        registration_images: body.registration_images || [],
+        selling_images: body.selling_images || [],
         vision_ai_response: body.vision_ai_response || null,
+        // Content
         title: body.title || `${body.brand} ${body.model}`,
         description_html: body.description_html || null,
         meta_description: body.meta_description || null,
@@ -76,6 +84,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const listing_type = searchParams.get('listing_type');
+    const listing_status = searchParams.get('listing_status');
     const sync_status = searchParams.get('sync_status');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -91,6 +100,10 @@ export async function GET(request: NextRequest) {
 
     if (listing_type) {
       query = query.eq('listing_type', listing_type);
+    }
+
+    if (listing_status) {
+      query = query.eq('listing_status', listing_status);
     }
 
     if (sync_status) {

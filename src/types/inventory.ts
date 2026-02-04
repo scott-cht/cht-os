@@ -9,6 +9,15 @@ export type ConditionGrade = 'mint' | 'excellent' | 'good' | 'fair' | 'poor';
 
 export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'error';
 
+// Listing status (separate from sync status)
+// on_demo = Currently on demonstration, not for sale
+// ready_to_sell = Ready to be listed for sale  
+// sold = Item has been sold
+export type ListingStatus = 'on_demo' | 'ready_to_sell' | 'sold';
+
+// Demo age alert levels
+export type DemoAgeAlert = 'ok' | 'warning' | 'critical';
+
 export interface InventoryItem {
   id: string;
   created_at: string;
@@ -16,6 +25,7 @@ export interface InventoryItem {
   
   // Classification
   listing_type: ListingType;
+  listing_status: ListingStatus | null;
   
   // Product Identification
   brand: string;
@@ -32,8 +42,16 @@ export interface InventoryItem {
   condition_grade: ConditionGrade | null;
   condition_report: string | null;
   
+  // Demo-specific fields
+  demo_start_date: string | null;
+  demo_location: string | null;
+  converted_to_sale_at: string | null;
+  sold_at: string | null;
+  
   // Media
   image_urls: string[];
+  registration_images: string[]; // Original photos when demo registered
+  selling_images: string[]; // Condition photos when converting to sale
   vision_ai_response: VisionAIResponse | null;
   
   // Content
@@ -60,10 +78,15 @@ export interface InventoryItem {
   // Meta
   created_by: string | null;
   is_archived: boolean;
+  
+  // Computed (from views)
+  days_on_demo?: number;
+  demo_age_alert?: DemoAgeAlert;
 }
 
 export interface InventoryItemInsert {
   listing_type: ListingType;
+  listing_status?: ListingStatus | null;
   brand: string;
   model: string;
   serial_number?: string | null;
@@ -73,7 +96,11 @@ export interface InventoryItemInsert {
   sale_price: number;
   condition_grade?: ConditionGrade | null;
   condition_report?: string | null;
+  demo_start_date?: string | null;
+  demo_location?: string | null;
   image_urls?: string[];
+  registration_images?: string[];
+  selling_images?: string[];
   vision_ai_response?: VisionAIResponse | null;
   title?: string | null;
   description_html?: string | null;
@@ -86,6 +113,7 @@ export interface InventoryItemInsert {
 
 export interface InventoryItemUpdate {
   listing_type?: ListingType;
+  listing_status?: ListingStatus | null;
   brand?: string;
   model?: string;
   serial_number?: string | null;
@@ -95,7 +123,13 @@ export interface InventoryItemUpdate {
   sale_price?: number;
   condition_grade?: ConditionGrade | null;
   condition_report?: string | null;
+  demo_start_date?: string | null;
+  demo_location?: string | null;
+  converted_to_sale_at?: string | null;
+  sold_at?: string | null;
   image_urls?: string[];
+  registration_images?: string[];
+  selling_images?: string[];
   title?: string | null;
   description_html?: string | null;
   meta_description?: string | null;
@@ -224,5 +258,43 @@ export const LISTING_TYPES: Record<ListingType, { label: string; description: st
     label: 'Ex-Demo',
     description: 'Former demonstration unit',
     icon: '🏷️',
+  },
+};
+
+// Listing status display info
+export const LISTING_STATUSES: Record<ListingStatus, { label: string; description: string; color: string }> = {
+  on_demo: {
+    label: 'On Demo',
+    description: 'Currently on demonstration display',
+    color: 'blue',
+  },
+  ready_to_sell: {
+    label: 'Ready to Sell',
+    description: 'Listed for sale',
+    color: 'green',
+  },
+  sold: {
+    label: 'Sold',
+    description: 'Item has been sold',
+    color: 'gray',
+  },
+};
+
+// Demo age alert display info
+export const DEMO_AGE_ALERTS: Record<DemoAgeAlert, { label: string; description: string; color: string }> = {
+  ok: {
+    label: 'Current',
+    description: 'Less than 12 months on demo',
+    color: 'green',
+  },
+  warning: {
+    label: '12+ Months',
+    description: 'On demo for over 12 months',
+    color: 'yellow',
+  },
+  critical: {
+    label: '24+ Months',
+    description: 'On demo for over 24 months - consider selling',
+    color: 'red',
   },
 };
