@@ -13,6 +13,11 @@ interface NavItem {
   phase?: string;
 }
 
+interface SidebarProps {
+  isCollapsed: boolean;
+  onToggle: () => void;
+}
+
 const navigation: NavItem[] = [
   {
     name: 'Dashboard',
@@ -85,7 +90,7 @@ const integrations = [
   { name: 'Notion', color: 'bg-zinc-700', connected: false },
 ];
 
-export function Sidebar() {
+export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
@@ -94,32 +99,66 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-      {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-zinc-800">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+    <aside 
+      className={`fixed left-0 top-0 z-40 h-screen bg-zinc-900 border-r border-zinc-800 flex flex-col transition-all duration-300 ${
+        isCollapsed ? 'w-16' : 'w-64'
+      }`}
+    >
+      {/* Logo & Toggle */}
+      <div className="h-16 flex items-center justify-between px-3 border-b border-zinc-800">
+        <Link href="/" className="flex items-center gap-3 overflow-hidden">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center flex-shrink-0">
             <span className="text-white font-bold text-sm">CHT</span>
           </div>
-          <div>
-            <span className="text-white font-semibold">Command Centre</span>
-          </div>
+          {!isCollapsed && (
+            <div className="whitespace-nowrap">
+              <span className="text-white font-semibold">Command Centre</span>
+            </div>
+          )}
         </Link>
+        
+        {/* Toggle Button */}
+        <button
+          onClick={onToggle}
+          className={`p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors ${
+            isCollapsed ? 'absolute left-3 top-3' : ''
+          }`}
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isCollapsed ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          )}
+        </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto">
+      <nav className="flex-1 px-2 py-4 overflow-y-auto overflow-x-hidden">
         <ul className="space-y-1">
           {navigation.map((item) => (
             <li key={item.name}>
               {item.disabled ? (
-                <div className="flex items-center gap-3 px-3 py-2.5 text-zinc-500 cursor-not-allowed">
-                  <span className="opacity-50">{item.icon}</span>
-                  <span className="flex-1 text-sm opacity-50">{item.name}</span>
-                  {item.phase && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500">
-                      {item.phase}
-                    </span>
+                <div 
+                  className={`flex items-center gap-3 px-3 py-2.5 text-zinc-500 cursor-not-allowed ${
+                    isCollapsed ? 'justify-center' : ''
+                  }`}
+                  title={isCollapsed ? `${item.name} (${item.phase})` : undefined}
+                >
+                  <span className="opacity-50 flex-shrink-0">{item.icon}</span>
+                  {!isCollapsed && (
+                    <>
+                      <span className="flex-1 text-sm opacity-50">{item.name}</span>
+                      {item.phase && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500">
+                          {item.phase}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (
@@ -127,22 +166,29 @@ export function Sidebar() {
                   <Link
                     href={item.href}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                      isCollapsed ? 'justify-center' : ''
+                    } ${
                       isActive(item.href)
                         ? 'bg-emerald-500/10 text-emerald-400'
                         : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
                     }`}
+                    title={isCollapsed ? item.name : undefined}
                   >
-                    {item.icon}
-                    <span className="flex-1 text-sm font-medium">{item.name}</span>
-                    {item.badge && (
-                      <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">
-                        {item.badge}
-                      </span>
+                    <span className="flex-shrink-0">{item.icon}</span>
+                    {!isCollapsed && (
+                      <>
+                        <span className="flex-1 text-sm font-medium">{item.name}</span>
+                        {item.badge && (
+                          <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500/20 text-emerald-400">
+                            {item.badge}
+                          </span>
+                        )}
+                      </>
                     )}
                   </Link>
                   
-                  {/* Sub-navigation */}
-                  {item.children && isActive(item.href) && (
+                  {/* Sub-navigation - only show when expanded and active */}
+                  {!isCollapsed && item.children && isActive(item.href) && (
                     <ul className="mt-1 ml-8 space-y-1">
                       {item.children.map((child) => (
                         <li key={child.name}>
@@ -167,30 +213,47 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* Integrations Status */}
-      <div className="px-4 py-4 border-t border-zinc-800">
-        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
-          Integrations
-        </p>
-        <div className="space-y-2">
-          {integrations.map((integration) => (
-            <div key={integration.name} className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${integration.connected ? integration.color : 'bg-zinc-600'}`} />
-              <span className={`text-sm ${integration.connected ? 'text-zinc-300' : 'text-zinc-500'}`}>
-                {integration.name}
-              </span>
-              {!integration.connected && (
-                <span className="text-[10px] text-zinc-600">Not configured</span>
-              )}
-            </div>
-          ))}
+      {/* Integrations Status - only show when expanded */}
+      {!isCollapsed && (
+        <div className="px-4 py-4 border-t border-zinc-800">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">
+            Integrations
+          </p>
+          <div className="space-y-2">
+            {integrations.map((integration) => (
+              <div key={integration.name} className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${integration.connected ? integration.color : 'bg-zinc-600'}`} />
+                <span className={`text-sm ${integration.connected ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                  {integration.name}
+                </span>
+                {!integration.connected && (
+                  <span className="text-[10px] text-zinc-600">Not configured</span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Collapsed integrations indicator */}
+      {isCollapsed && (
+        <div className="px-2 py-4 border-t border-zinc-800">
+          <div className="flex flex-col items-center gap-2">
+            {integrations.map((integration) => (
+              <div 
+                key={integration.name}
+                className={`w-2 h-2 rounded-full ${integration.connected ? integration.color : 'bg-zinc-600'}`}
+                title={`${integration.name}: ${integration.connected ? 'Connected' : 'Not configured'}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Version */}
-      <div className="px-4 py-3 border-t border-zinc-800">
+      <div className={`px-4 py-3 border-t border-zinc-800 ${isCollapsed ? 'text-center' : ''}`}>
         <p className="text-xs text-zinc-600">
-          v1.0.0 · Phase 1
+          {isCollapsed ? 'v1' : 'v1.0.0 · Phase 1'}
         </p>
       </div>
     </aside>
