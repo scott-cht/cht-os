@@ -42,9 +42,10 @@ const AUSTRALIAN_RETAILERS = [
   'apple.com.au',
 ];
 
-// Sites to exclude (marketplaces, international)
+// Sites to exclude (marketplaces, international, grey market)
 const EXCLUDED_DOMAINS = [
   'ebay.com',
+  'ebay.com.au',
   'amazon.com',
   'amazon.com.au',
   'gumtree.com.au',
@@ -54,6 +55,27 @@ const EXCLUDED_DOMAINS = [
   'aliexpress',
   'wish.com',
   'kogan.com', // Often grey market
+  'catch.com.au', // Marketplace
+  'mydeal.com.au', // Marketplace
+  'ozbargain.com.au', // Deal site, not retailer
+  'staticice.com.au', // Price comparison, not retailer
+  'pricespy.com.au', // Price comparison
+];
+
+// Specialist hi-fi retailers - prioritize these for specialist brands
+const SPECIALIST_RETAILERS = [
+  'addictedtoaudio.com.au',
+  'selby.com.au',
+  'todds.com.au',
+  'digitalcinema.com.au',
+  'clefhifi.com.au',
+  'audiojunction.com.au',
+  'lenwallisaudio.com.au',
+  'stereo.net.au',
+  'noosa-hifi.com.au',
+  'melbournehifi.com.au',
+  'sydhifi.com.au',
+  'lifestyle-store.com.au',
 ];
 
 interface SerpApiResult {
@@ -136,6 +158,8 @@ async function searchWithSerpAPI(
   model: string
 ): Promise<RRPSearchResult | null> {
   try {
+    const isSpecialist = isSpecialistBrand(brand);
+    
     // Search Google Shopping AU
     const shoppingUrl = new URL('https://serpapi.com/search');
     shoppingUrl.searchParams.set('engine', 'google_shopping');
@@ -164,21 +188,45 @@ async function searchWithSerpAPI(
         source.includes(domain) || link.includes(domain)
       );
       
+      // For specialist brands, only trust specialist retailers
+      const isSpecialistRetailer = SPECIALIST_RETAILERS.some(domain =>
+        source.includes(domain.replace('.com.au', '')) || link.includes(domain)
+      );
+      
+      // Reject mainstream retailers for specialist brands
+      const isMainstreamRetailer = ['jb hi-fi', 'jbhifi', 'harvey norman', 'good guys', 'officeworks', 'bing lee'].some(
+        name => source.toLowerCase().includes(name)
+      );
+      
+      if (isSpecialist && isMainstreamRetailer && !isSpecialistRetailer) {
+        return false; // Skip mainstream for specialist brands
+      }
+      
       return isAustralian && !isExcluded;
     }) || [];
 
-    if (validResults.length > 0) {
-      // Get the most common price (mode) or highest for RRP
-      const prices = validResults
+    // Prioritize specialist retailers for specialist brands
+    const sortedResults = isSpecialist
+      ? validResults.sort((a, b) => {
+          const aIsSpecialist = SPECIALIST_RETAILERS.some(d => a.link?.includes(d));
+          const bIsSpecialist = SPECIALIST_RETAILERS.some(d => b.link?.includes(d));
+          if (aIsSpecialist && !bIsSpecialist) return -1;
+          if (!aIsSpecialist && bIsSpecialist) return 1;
+          return 0;
+        })
+      : validResults;
+
+    if (sortedResults.length > 0) {
+      // Use the first result after sorting (prioritizes specialist for specialist brands)
+      const prices = sortedResults
         .map(r => r.extracted_price)
-        .filter(p => p && p > 0)
-        .sort((a, b) => b - a);
+        .filter(p => p && p > 0);
 
       if (prices.length > 0) {
-        const bestResult = validResults.find(r => r.extracted_price === prices[0]);
+        const bestResult = sortedResults[0];
         
         return {
-          rrp_aud: prices[0],
+          rrp_aud: bestResult.extracted_price,
           source: bestResult?.source || 'Google Shopping AU',
           source_url: bestResult?.link || '',
           confidence: prices.length >= 3 ? 'high' : prices.length >= 2 ? 'medium' : 'low',
@@ -190,7 +238,7 @@ async function searchWithSerpAPI(
     // Try organic search as fallback
     const organicUrl = new URL('https://serpapi.com/search');
     organicUrl.searchParams.set('engine', 'google');
-    organicUrl.searchParams.set('q', `${brand} ${model} price AUD`);
+    organicUrl.searchParams.set('q', `${brand} ${model} price AUD site:.com.au`);
     organicUrl.searchParams.set('location', 'Australia');
     organicUrl.searchParams.set('google_domain', 'google.com.au');
     organicUrl.searchParams.set('gl', 'au');
@@ -205,6 +253,14 @@ async function searchWithSerpAPI(
       const link = result.link?.toLowerCase() || '';
       const isAustralian = AUSTRALIAN_RETAILERS.some(domain => link.includes(domain));
       const isExcluded = EXCLUDED_DOMAINS.some(domain => link.includes(domain));
+      
+      // For specialist brands, prefer specialist retailers
+      if (isSpecialist) {
+        const isSpecialistRetailer = SPECIALIST_RETAILERS.some(domain => link.includes(domain));
+        const isMainstreamRetailer = ['jbhifi', 'harveynorman', 'thegoodguys'].some(name => link.includes(name));
+        if (isMainstreamRetailer && !isSpecialistRetailer) return false;
+      }
+      
       return isAustralian && !isExcluded && result.price;
     }) || [];
 
@@ -226,6 +282,23 @@ async function searchWithSerpAPI(
   }
 }
 
+// Brand to specialist retailer mapping (specialist hi-fi brands need specialist retailers)
+const SPECIALIST_BRANDS = [
+  'exposure', 'naim', 'rega', 'linn', 'arcam', 'creek', 'cyrus', 'densen',
+  'hegel', 'primare', 'rotel', 'cambridge audio', 'audiolab', 'musical fidelity',
+  'mcintosh', 'mark levinson', 'krell', 'accuphase', 'luxman', 'pass labs',
+  'focal', 'dynaudio', 'b&w', 'bowers', 'kef', 'dali', 'monitor audio',
+  'spendor', 'harbeth', 'proac', 'atc', 'quad', 'wharfedale', 'tannoy',
+  'chord', 'ps audio', 'bryston', 'parasound', 'anthem', 'classe',
+  'moon', 'simaudio', 'ayre', 'boulder', 'gryphon', 'solution',
+  'totem', 'sonus faber', 'vienna acoustics', 'wilson', 'magico',
+];
+
+function isSpecialistBrand(brand: string): boolean {
+  const lower = brand.toLowerCase();
+  return SPECIALIST_BRANDS.some(b => lower.includes(b));
+}
+
 /**
  * Fallback: Scrape known Australian retailers
  */
@@ -233,8 +306,60 @@ async function scrapeAustralianRetailers(
   brand: string, 
   model: string
 ): Promise<RRPSearchResult | null> {
-  // Priority retailers to check
-  const retailersToCheck = [
+  // Specialist hi-fi retailers (priority for specialist brands)
+  const specialistRetailers = [
+    {
+      name: 'Addicted to Audio',
+      searchUrl: (b: string, m: string) => 
+        `https://addictedtoaudio.com.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'addictedtoaudio.com.au',
+    },
+    {
+      name: 'Selby Acoustics',
+      searchUrl: (b: string, m: string) => 
+        `https://www.selby.com.au/catalogsearch/result/?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'selby.com.au',
+    },
+    {
+      name: 'Todds Hi-Fi',
+      searchUrl: (b: string, m: string) => 
+        `https://www.todds.com.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'todds.com.au',
+    },
+    {
+      name: 'Digital Cinema',
+      searchUrl: (b: string, m: string) => 
+        `https://www.digitalcinema.com.au/search?type=product&q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'digitalcinema.com.au',
+    },
+    {
+      name: 'Clef Hi-Fi',
+      searchUrl: (b: string, m: string) => 
+        `https://www.clefhifi.com.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'clefhifi.com.au',
+    },
+    {
+      name: 'Audio Junction',
+      searchUrl: (b: string, m: string) => 
+        `https://www.audiojunction.com.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'audiojunction.com.au',
+    },
+    {
+      name: 'Len Wallis Audio',
+      searchUrl: (b: string, m: string) =>
+        `https://www.lenwallisaudio.com.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'lenwallisaudio.com.au',
+    },
+    {
+      name: 'StereoNET',
+      searchUrl: (b: string, m: string) =>
+        `https://www.stereo.net.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'stereo.net.au',
+    },
+  ];
+
+  // Mainstream retailers
+  const mainstreamRetailers = [
     {
       name: 'JB Hi-Fi',
       searchUrl: (b: string, m: string) => 
@@ -253,7 +378,18 @@ async function scrapeAustralianRetailers(
         `https://www.thegoodguys.com.au/SearchDisplay?searchTerm=${encodeURIComponent(`${b} ${m}`)}`,
       domain: 'thegoodguys.com.au',
     },
+    {
+      name: 'Videopro',
+      searchUrl: (b: string, m: string) => 
+        `https://www.videopro.com.au/search?q=${encodeURIComponent(`${b} ${m}`)}`,
+      domain: 'videopro.com.au',
+    },
   ];
+
+  // Choose retailer order based on brand
+  const retailersToCheck = isSpecialistBrand(brand)
+    ? [...specialistRetailers, ...mainstreamRetailers]
+    : [...mainstreamRetailers, ...specialistRetailers];
 
   for (const retailer of retailersToCheck) {
     try {

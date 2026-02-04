@@ -23,7 +23,7 @@ export default function TradeInListerPage() {
   const router = useRouter();
   
   const [step, setStep] = useState<'capture' | 'details' | 'review'>('capture');
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [visionResult, setVisionResult] = useState<VisionAIResponse | null>(null);
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [isFetchingRRP, setIsFetchingRRP] = useState(false);
@@ -40,13 +40,14 @@ export default function TradeInListerPage() {
   const [rrpSource, setRrpSource] = useState<string | null>(null);
   const [salePrice, setSalePrice] = useState<number | null>(null);
 
-  // Handle camera capture
-  const handleCapture = useCallback(async (imageData: string) => {
-    setCapturedImage(imageData);
+  // Handle camera capture (first image for AI, all images for listing)
+  const handleCapture = useCallback(async (imageData: string, allImages?: string[]) => {
+    setCapturedImages(allImages || [imageData]);
     setIsIdentifying(true);
     setError(null);
 
     try {
+      // Use first image for AI identification
       const response = await fetch('/api/vision/identify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +137,7 @@ export default function TradeInListerPage() {
           sale_price: salePrice,
           condition_grade: conditionGrade,
           condition_report: conditionReport || null,
-          image_urls: capturedImage ? [capturedImage] : [],
+          image_urls: capturedImages,
           vision_ai_response: visionResult,
           rrp_source: rrpSource,
         }),
@@ -154,7 +155,7 @@ export default function TradeInListerPage() {
     } finally {
       setIsCreating(false);
     }
-  }, [brand, model, serialNumber, rrpAud, salePrice, conditionGrade, conditionReport, capturedImage, visionResult, rrpSource, router]);
+  }, [brand, model, serialNumber, rrpAud, salePrice, conditionGrade, conditionReport, capturedImages, visionResult, rrpSource, router]);
 
   return (
     <Shell 
@@ -170,6 +171,8 @@ export default function TradeInListerPage() {
             onCapture={handleCapture}
             onCancel={handleSkipCamera}
             isProcessing={isIdentifying}
+            multiple={true}
+            maxPhotos={10}
           />
         </div>
       )}
@@ -184,10 +187,26 @@ export default function TradeInListerPage() {
             </div>
           )}
 
-          {/* Captured Image Preview */}
-          {capturedImage && (
+          {/* Captured Images Preview */}
+          {capturedImages.length > 0 && (
             <Card className="mb-6 p-0 overflow-hidden">
-              <img src={capturedImage} alt="Captured" className="w-full h-48 object-cover" />
+              {/* Main image */}
+              <img src={capturedImages[0]} alt="Primary" className="w-full h-48 object-cover" />
+              
+              {/* Thumbnail strip if multiple */}
+              {capturedImages.length > 1 && (
+                <div className="p-2 bg-zinc-100 dark:bg-zinc-800 flex gap-2 overflow-x-auto">
+                  {capturedImages.map((img, idx) => (
+                    <img 
+                      key={idx} 
+                      src={img} 
+                      alt={`Photo ${idx + 1}`} 
+                      className={`w-12 h-12 object-cover rounded ${idx === 0 ? 'ring-2 ring-emerald-500' : ''}`}
+                    />
+                  ))}
+                </div>
+              )}
+              
               {visionResult && (
                 <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 flex items-center gap-2">
                   <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -201,6 +220,9 @@ export default function TradeInListerPage() {
                   </span>
                 </div>
               )}
+              <div className="p-2 bg-zinc-50 dark:bg-zinc-800/50 text-xs text-zinc-500 text-center">
+                {capturedImages.length} photo{capturedImages.length !== 1 ? 's' : ''} captured
+              </div>
             </Card>
           )}
 
@@ -366,8 +388,22 @@ export default function TradeInListerPage() {
               Review Trade-In
             </h2>
 
-            {capturedImage && (
-              <img src={capturedImage} alt="Product" className="w-full h-48 object-cover rounded-lg mb-6" />
+            {capturedImages.length > 0 && (
+              <div className="mb-6">
+                <img src={capturedImages[0]} alt="Product" className="w-full h-48 object-cover rounded-lg" />
+                {capturedImages.length > 1 && (
+                  <div className="mt-2 flex gap-2 overflow-x-auto">
+                    {capturedImages.slice(1).map((img, idx) => (
+                      <img 
+                        key={idx} 
+                        src={img} 
+                        alt={`Photo ${idx + 2}`} 
+                        className="w-16 h-16 object-cover rounded"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="space-y-4">
