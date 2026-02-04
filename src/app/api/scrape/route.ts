@@ -8,49 +8,67 @@ import { createServerClient } from '@/lib/supabase/server';
  * Priority: JSON-LD first, then HTML fallback
  * 
  * POST /api/scrape
- * Body: { productId: string }
+ * Body: { url: string } OR { productId: string }
  */
 export async function POST(request: NextRequest) {
   let browser = null;
   
   try {
-    const { productId } = await request.json();
+    const body = await request.json();
+    const { url, productId } = body;
 
-    if (!productId) {
+    let sourceUrl: string;
+    let productRecord: { id?: string; source_url?: string } | null = null;
+
+    // Support both direct URL and productId lookup
+    if (url) {
+      // Direct URL provided
+      sourceUrl = url;
+    } else if (productId) {
+      // Look up from database
+      const supabase = createServerClient();
+      const { data: product, error: fetchError } = await supabase
+        .from('product_onboarding')
+        .select('*')
+        .eq('id', productId)
+        .single();
+
+      if (fetchError || !product) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        );
+      }
+
+      if (!product.source_url) {
+        return NextResponse.json(
+          { error: 'Product has no source URL' },
+          { status: 400 }
+        );
+      }
+
+      sourceUrl = product.source_url;
+      productRecord = product;
+
+      // Update status to processing
+      await supabase
+        .from('product_onboarding')
+        .update({ status: 'processing' })
+        .eq('id', productId);
+    } else {
       return NextResponse.json(
-        { error: 'Product ID is required' },
+        { error: 'URL or Product ID is required' },
         { status: 400 }
       );
     }
 
-    const supabase = createServerClient();
-
-    // Get the product entry
-    const { data: product, error: fetchError } = await supabase
-      .from('product_onboarding')
-      .select('*')
-      .eq('id', productId)
-      .single();
-
-    if (fetchError || !product) {
+    // Validate URL
+    if (!sourceUrl.startsWith('http')) {
       return NextResponse.json(
-        { error: 'Product not found' },
-        { status: 404 }
-      );
-    }
-
-    if (!product.source_url) {
-      return NextResponse.json(
-        { error: 'Product has no source URL' },
+        { error: 'Invalid URL. Please provide a valid product page URL.' },
         { status: 400 }
       );
     }
-
-    // Update status to processing
-    await supabase
-      .from('product_onboarding')
-      .update({ status: 'processing' })
-      .eq('id', productId);
 
     // Launch browser and scrape
     browser = await chromium.launch({ headless: true });
@@ -64,7 +82,7 @@ export async function POST(request: NextRequest) {
     const page = await context.newPage();
 
     // Check if URL already has #specifications anchor, if not try adding it
-    let targetUrl = product.source_url;
+    let targetUrl = sourceUrl;
     if (!targetUrl.includes('#specifications') && !targetUrl.includes('#specs')) {
       // Try navigating directly to specifications anchor
       targetUrl = targetUrl.includes('#') ? targetUrl : `${targetUrl}#specifications`;
@@ -159,38 +177,43 @@ export async function POST(request: NextRequest) {
       jsonLd: jsonLd || undefined,
       htmlParsed,
       scrapedAt: new Date().toISOString(),
-      sourceUrl: product.source_url,
+      sourceUrl: sourceUrl,
     };
 
     // Extract key fields for convenience
     const extractedTitle = jsonLd?.name || htmlParsed?.title || null;
     const extractedPrice = parsePrice(jsonLd?.offers?.price || jsonLd?.price || htmlParsed?.price);
     const extractedDescription = htmlParsed?.description || jsonLd?.description || null;
+    const extractedBrand = jsonLd?.brand || htmlParsed?.brand || null;
 
-    // Update the product with scraped data
-    const { data: updatedProduct, error: updateError } = await supabase
-      .from('product_onboarding')
-      .update({
-        raw_scraped_json: rawScrapedJson,
-        title: extractedTitle,
-        rrp_aud: extractedPrice,
-        status: 'reviewed',
-      })
-      .eq('id', productId)
-      .select()
-      .single();
+    // If we have a productRecord, update it in the database
+    if (productRecord?.id) {
+      const supabase = createServerClient();
+      const { error: updateError } = await supabase
+        .from('product_onboarding')
+        .update({
+          raw_scraped_json: rawScrapedJson,
+          title: extractedTitle,
+          rrp_aud: extractedPrice,
+          status: 'reviewed',
+        })
+        .eq('id', productRecord.id);
 
-    if (updateError) {
-      throw new Error(`Failed to save scraped data: ${updateError.message}`);
+      if (updateError) {
+        console.error('Failed to save scraped data:', updateError.message);
+      }
     }
 
     await browser.close();
 
+    // Return scraped data (works for both direct URL and productId modes)
     return NextResponse.json({
       success: true,
-      product: updatedProduct,
+      jsonLd: jsonLd || null,
+      htmlParsed,
       extracted: {
         title: extractedTitle,
+        brand: extractedBrand,
         price: extractedPrice,
         description: extractedDescription,
         hasJsonLd: !!jsonLd,
@@ -213,25 +236,13 @@ export async function POST(request: NextRequest) {
       await browser.close();
     }
 
-    // Try to update status to error
-    try {
-      const { productId } = await request.json();
-      if (productId) {
-        const supabase = createServerClient();
-        await supabase
-          .from('product_onboarding')
-          .update({ 
-            status: 'error',
-            error_log: error instanceof Error ? error.message : 'Unknown error',
-          })
-          .eq('id', productId);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
+    const errorMessage = error instanceof Error ? error.message : 'Scraping failed';
 
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Scraping failed' },
+      { 
+        error: errorMessage,
+        success: false,
+      },
       { status: 500 }
     );
   }

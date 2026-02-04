@@ -92,22 +92,29 @@ export default function NewRetailListerPage() {
 
     try {
       const rawData = scrapedData as {
-        jsonLd?: { brand?: string; name?: string; sku?: string; offers?: { price?: string } };
+        extracted?: { brand?: string; title?: string; price?: number; description?: string };
+        jsonLd?: { brand?: string; name?: string; sku?: string; description?: string; offers?: { price?: string } };
         htmlParsed?: { brand?: string; title?: string; price?: string; description?: string };
       };
+
+      // Use extracted data first, fallback to jsonLd/htmlParsed
+      const brand = rawData.extracted?.brand || rawData.jsonLd?.brand || rawData.htmlParsed?.brand || 'Unknown';
+      const title = rawData.extracted?.title || rawData.jsonLd?.name || rawData.htmlParsed?.title || 'Unknown';
+      const price = rawData.extracted?.price || parseFloat(rawData.jsonLd?.offers?.price || rawData.htmlParsed?.price || '0') || 0;
+      const description = rawData.extracted?.description || rawData.htmlParsed?.description || rawData.jsonLd?.description || null;
 
       const response = await fetch('/api/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           listing_type: 'new',
-          brand: rawData.jsonLd?.brand || rawData.htmlParsed?.brand || 'Unknown',
-          model: rawData.jsonLd?.name || rawData.htmlParsed?.title || 'Unknown',
+          brand,
+          model: title,
           sku: rawData.jsonLd?.sku || null,
-          rrp_aud: parseFloat(rawData.jsonLd?.offers?.price || rawData.htmlParsed?.price || '0') || null,
-          sale_price: parseFloat(rawData.jsonLd?.offers?.price || rawData.htmlParsed?.price || '0') || 0,
+          rrp_aud: price || null,
+          sale_price: price || 0,
           source_url: selectedUrl,
-          description_html: rawData.htmlParsed?.description || null,
+          description_html: description,
         }),
       });
 
@@ -286,24 +293,64 @@ export default function NewRetailListerPage() {
                 <p className="text-zinc-900 dark:text-white truncate">{selectedUrl}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
-                  <p className="text-sm text-zinc-500 mb-1">Brand</p>
-                  <p className="font-medium text-zinc-900 dark:text-white">
-                    {(scrapedData as Record<string, Record<string, string>>).jsonLd?.brand || 
-                     (scrapedData as Record<string, Record<string, string>>).htmlParsed?.brand || 
-                     'Not found'}
-                  </p>
-                </div>
-                <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
-                  <p className="text-sm text-zinc-500 mb-1">Product</p>
-                  <p className="font-medium text-zinc-900 dark:text-white">
-                    {(scrapedData as Record<string, Record<string, string>>).jsonLd?.name || 
-                     (scrapedData as Record<string, Record<string, string>>).htmlParsed?.title || 
-                     'Not found'}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const data = scrapedData as {
+                  extracted?: { brand?: string; title?: string; price?: number; description?: string; hasJsonLd?: boolean; imageCount?: number; specCount?: number };
+                  jsonLd?: { brand?: string; name?: string };
+                  htmlParsed?: { brand?: string; title?: string };
+                };
+                const brand = data.extracted?.brand || data.jsonLd?.brand || data.htmlParsed?.brand;
+                const title = data.extracted?.title || data.jsonLd?.name || data.htmlParsed?.title;
+                const price = data.extracted?.price;
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <p className="text-sm text-zinc-500 mb-1">Brand</p>
+                        <p className="font-medium text-zinc-900 dark:text-white">
+                          {brand || 'Not found'}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <p className="text-sm text-zinc-500 mb-1">Product</p>
+                        <p className="font-medium text-zinc-900 dark:text-white">
+                          {title || 'Not found'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <p className="text-sm text-zinc-500 mb-1">RRP</p>
+                        <p className="font-medium text-zinc-900 dark:text-white">
+                          {price ? `$${price.toLocaleString()}` : 'Not found'}
+                        </p>
+                      </div>
+                      <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <p className="text-sm text-zinc-500 mb-1">Images</p>
+                        <p className="font-medium text-zinc-900 dark:text-white">
+                          {data.extracted?.imageCount || 0} found
+                        </p>
+                      </div>
+                      <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <p className="text-sm text-zinc-500 mb-1">Specs</p>
+                        <p className="font-medium text-zinc-900 dark:text-white">
+                          {data.extracted?.specCount || 0} items
+                        </p>
+                      </div>
+                    </div>
+
+                    {data.extracted?.hasJsonLd && (
+                      <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                        <p className="text-sm text-emerald-700 dark:text-emerald-400">
+                          ✓ Structured data (JSON-LD) found - high accuracy extraction
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               <div className="flex gap-3 pt-4">
                 <Button variant="secondary" onClick={() => setStep('search')}>
