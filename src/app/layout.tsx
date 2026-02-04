@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Product Scout | Shopify Product Onboarder",
-  description: "Automate product discovery, content generation, and Shopify onboarding for Australian e-commerce",
+  title: "CHT Command Centre",
+  description: "Centralized intelligence layer for product intake, marketing, and cross-platform synchronization",
 };
 
 export default function RootLayout({
@@ -23,11 +24,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-50 dark:bg-zinc-950`}
       >
-        {children}
+        <ThemeProvider defaultTheme="dark">
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
