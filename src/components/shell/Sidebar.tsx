@@ -105,36 +105,41 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       }`}
     >
       {/* Logo & Toggle */}
-      <div className="h-16 flex items-center justify-between px-3 border-b border-zinc-800">
-        <Link href="/" className="flex items-center gap-3 overflow-hidden">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm">CHT</span>
+      <div className="h-16 flex items-center border-b border-zinc-800">
+        {isCollapsed ? (
+          /* Collapsed: Just show toggle button centered */
+          <div className="w-full flex justify-center">
+            <button
+              onClick={onToggle}
+              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              title="Expand sidebar"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
           </div>
-          {!isCollapsed && (
-            <div className="whitespace-nowrap">
-              <span className="text-white font-semibold">Command Centre</span>
-            </div>
-          )}
-        </Link>
-        
-        {/* Toggle Button */}
-        <button
-          onClick={onToggle}
-          className={`p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors ${
-            isCollapsed ? 'absolute left-3 top-3' : ''
-          }`}
-          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {isCollapsed ? (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          )}
-        </button>
+        ) : (
+          /* Expanded: Show logo and collapse button */
+          <div className="w-full flex items-center justify-between px-3">
+            <Link href="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-sm">CHT</span>
+              </div>
+              <span className="text-white font-semibold whitespace-nowrap">Command Centre</span>
+            </Link>
+            
+            <button
+              onClick={onToggle}
+              className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              title="Collapse sidebar"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
