@@ -9,9 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
+    "@shopify/shopify-api": "^12.3.0",
+    "@supabase/supabase-js": "^2.93.3",
     "next": "16.1.6",
+    "playwright": "^1.58.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

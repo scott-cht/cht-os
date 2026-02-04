@@ -24,3 +24,467 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Product Description Styling */
+.product-description-content {
+  line-height: 1.7;
+}
+
+.product-description-content h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--foreground);
+}
+
+.product-description-content p {
+  margin-bottom: 1rem;
+}
+
+.product-description-content .product-intro {
+  font-size: 1.05rem;
+  margin-bottom: 1.5rem;
+}
+
+.product-description-content .feature-list,
+.product-description-content ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.product-description-content .feature-list li,
+.product-description-content ul li {
+  position: relative;
+  padding-left: 1.75rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.product-description-content .feature-list li::before,
+.product-description-content ul li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #10b981;
+  font-weight: bold;
+}
+
+/* Specifications Table Styling */
+.specifications-table,
+.product-description-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.925rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .specifications-table,
+  .product-description-content table {
+    border-color: #374151;
+  }
+}
+
+.specifications-table thead th,
+.product-description-content table thead th {
+  background: #10b981;
+  color: white;
+  font-weight: 600;
+  padding: 0.875rem 1rem;
+  text-align: left;
+  font-size: 1rem;
+}
+
+.specifications-table tbody tr,
+.product-description-content table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .specifications-table tbody tr,
+  .product-description-content table tbody tr {
+    border-bottom-color: #374151;
+  }
+}
+
+.specifications-table tbody tr:nth-child(even),
+.product-description-content table tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .specifications-table tbody tr:nth-child(even),
+  .product-description-content table tbody tr:nth-child(even) {
+    background: #1f2937;
+  }
+}
+
+.specifications-table tbody tr:hover,
+.product-description-content table tbody tr:hover {
+  background: #ecfdf5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .specifications-table tbody tr:hover,
+  .product-description-content table tbody tr:hover {
+    background: #064e3b;
+  }
+}
+
+.specifications-table th,
+.product-description-content table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 500;
+  color: #6b7280;
+  width: 40%;
+  vertical-align: top;
+}
+
+@media (prefers-color-scheme: dark) {
+  .specifications-table th,
+  .product-description-content table th {
+    color: #9ca3af;
+  }
+}
+
+.specifications-table td,
+.product-description-content table td {
+  padding: 0.75rem 1rem;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+/* Prose styling for AI content */
+.prose-product {
+  max-width: none;
+}
+
+.prose-product h3 {
+  color: #111827;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .prose-product h3 {
+    color: #f3f4f6;
+  }
+}
+
+/* Specifications Accordion Styling */
+.specifications-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.spec-category {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-category {
+    border-color: #374151;
+    background: #1f2937;
+  }
+}
+
+.spec-category-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: #f9fafb;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+  transition: background-color 0.15s;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-category-header {
+    background: #111827;
+  }
+}
+
+.spec-category-header:hover {
+  background: #f3f4f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-category-header:hover {
+    background: #1f2937;
+  }
+}
+
+.spec-category[open] .spec-category-header {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-category[open] .spec-category-header {
+    border-bottom-color: #374151;
+  }
+}
+
+.spec-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.spec-category-name {
+  flex: 1;
+  color: #111827;
+  font-size: 0.95rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-category-name {
+    color: #f3f4f6;
+  }
+}
+
+.spec-count {
+  font-size: 0.75rem;
+  color: #6b7280;
+  background: #e5e7eb;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-count {
+    color: #9ca3af;
+    background: #374151;
+  }
+}
+
+.spec-category summary::-webkit-details-marker {
+  display: none;
+}
+
+.spec-category summary::after {
+  content: "▼";
+  font-size: 0.625rem;
+  color: #9ca3af;
+  transition: transform 0.2s;
+}
+
+.spec-category[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.spec-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.spec-table tr {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-table tr {
+    border-bottom-color: #374151;
+  }
+}
+
+.spec-table tr:last-child {
+  border-bottom: none;
+}
+
+.spec-table tr:hover {
+  background: #f9fafb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-table tr:hover {
+    background: #111827;
+  }
+}
+
+.spec-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 500;
+  color: #6b7280;
+  width: 40%;
+  font-size: 0.875rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-table th {
+    color: #9ca3af;
+  }
+}
+
+.spec-table td {
+  padding: 0.75rem 1rem;
+  color: #111827;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-table td {
+    color: #f3f4f6;
+  }
+}
+
+.spec-unit {
+  color: #9ca3af;
+  font-weight: 400;
+  font-size: 0.8125rem;
+}
+
+/* Editable specifications UI */
+.spec-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.spec-editor-category {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-editor-category {
+    border-color: #374151;
+  }
+}
+
+.spec-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-editor-header {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+}
+
+.spec-editor-header input {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  background: transparent;
+}
+
+.spec-editor-header input:focus {
+  outline: none;
+  border-color: #10b981;
+  background: white;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-editor-header input:focus {
+    background: #1f2937;
+  }
+}
+
+.spec-editor-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 80px auto;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  align-items: center;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-editor-row {
+    border-bottom-color: #374151;
+  }
+}
+
+.spec-editor-row:last-child {
+  border-bottom: none;
+}
+
+.spec-editor-row input {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-editor-row input {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f3f4f6;
+  }
+}
+
+.spec-editor-row input:focus {
+  outline: none;
+  border-color: #10b981;
+}
+
+.spec-delete-btn {
+  padding: 0.25rem;
+  color: #ef4444;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s;
+}
+
+.spec-delete-btn:hover {
+  background: #fef2f2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-delete-btn:hover {
+    background: #450a0a;
+  }
+}
+
+.spec-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  margin: 0.5rem 1rem;
+  color: #10b981;
+  background: transparent;
+  border: 1px dashed #10b981;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background-color 0.15s;
+}
+
+.spec-add-btn:hover {
+  background: #ecfdf5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .spec-add-btn:hover {
+    background: #064e3b;
+  }
+}
