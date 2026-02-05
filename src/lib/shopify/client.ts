@@ -1,14 +1,73 @@
 import '@shopify/shopify-api/adapters/node';
 import { shopifyApi, ApiVersion, Session } from '@shopify/shopify-api';
+import { createClient } from '@supabase/supabase-js';
 
 const shopifyDomain = process.env.SHOPIFY_STORE_DOMAIN || '';
-const shopifyAccessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || '';
+
+// Cache for the OAuth token
+let cachedToken: string | null = null;
+let tokenFetchedAt: number = 0;
+const TOKEN_CACHE_MS = 60000; // Cache for 1 minute
 
 /**
- * Check if Shopify is configured
+ * Get Shopify access token from Supabase (OAuth) or env var (fallback)
  */
-export function isShopifyConfigured(): boolean {
-  return Boolean(shopifyDomain && shopifyAccessToken);
+async function getAccessToken(): Promise<string | null> {
+  // Check env var first (for backwards compatibility)
+  if (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN) {
+    return process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+  }
+  
+  // Check cache
+  if (cachedToken && Date.now() - tokenFetchedAt < TOKEN_CACHE_MS) {
+    return cachedToken;
+  }
+  
+  // Fetch from Supabase
+  try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data, error } = await supabase
+      .from('oauth_tokens')
+      .select('access_token')
+      .eq('provider', 'shopify')
+      .eq('shop', shopifyDomain)
+      .single();
+    
+    if (error || !data) {
+      return null;
+    }
+    
+    cachedToken = data.access_token;
+    tokenFetchedAt = Date.now();
+    return cachedToken;
+  } catch (error) {
+    console.error('Failed to fetch Shopify token:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if Shopify is configured (has domain and token)
+ */
+export async function isShopifyConfigured(): Promise<boolean> {
+  if (!shopifyDomain) return false;
+  const token = await getAccessToken();
+  return Boolean(token);
+}
+
+/**
+ * Check if Shopify has basic config (for showing auth button)
+ */
+export function hasShopifyConfig(): boolean {
+  return Boolean(
+    shopifyDomain &&
+    process.env.SHOPIFY_API_KEY &&
+    process.env.SHOPIFY_API_SECRET
+  );
 }
 
 /**
@@ -17,9 +76,9 @@ export function isShopifyConfigured(): boolean {
 export const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY || '',
   apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
-  scopes: ['write_products', 'read_products'],
+  scopes: ['write_products', 'read_products', 'write_inventory', 'read_inventory'],
   hostName: shopifyDomain?.replace('https://', '').replace('.myshopify.com', '') || '',
-  apiVersion: ApiVersion.January26,
+  apiVersion: ApiVersion.January25,
   isEmbeddedApp: false,
 });
 
@@ -27,8 +86,10 @@ export const shopify = shopifyApi({
  * Create a session for Admin API requests
  * Returns null if Shopify is not configured
  */
-export function createAdminSession(): Session | null {
-  if (!isShopifyConfigured()) {
+export async function createAdminSession(): Promise<Session | null> {
+  const token = await getAccessToken();
+  
+  if (!shopifyDomain || !token) {
     return null;
   }
   
@@ -37,7 +98,7 @@ export function createAdminSession(): Session | null {
     shop: shopifyDomain,
     state: '',
     isOnline: false,
-    accessToken: shopifyAccessToken,
+    accessToken: token,
   });
 }
 
@@ -45,14 +106,13 @@ export function createAdminSession(): Session | null {
  * Get GraphQL client for Admin API
  * Returns null if Shopify is not configured
  */
-export function getGraphQLClient() {
-  if (!isShopifyConfigured()) {
+export async function getGraphQLClient() {
+  const session = await createAdminSession();
+  
+  if (!session) {
     console.warn('Shopify is not configured. Skipping GraphQL client creation.');
     return null;
   }
-  
-  const session = createAdminSession();
-  if (!session) return null;
   
   return new shopify.clients.Graphql({ session });
 }

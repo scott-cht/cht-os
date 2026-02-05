@@ -6,6 +6,7 @@ import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { notify } from '@/lib/store/app-store';
 
 interface SearchResult {
   title: string;
@@ -47,11 +48,18 @@ export default function NewRetailListerPage() {
 
       if (data.error) {
         setError(data.error);
+        notify.error('Search failed', data.error);
       } else {
         setSearchResults(data.results || []);
+        if (data.results?.length > 0) {
+          notify.success('Search complete', `Found ${data.results.length} results`);
+        } else {
+          notify.info('No results', 'Try a different search query');
+        }
       }
     } catch (err) {
       setError('Search failed. Please try again.');
+      notify.error('Search failed', 'Please try again');
     } finally {
       setIsSearching(false);
     }
@@ -74,14 +82,17 @@ export default function NewRetailListerPage() {
 
       if (data.error) {
         setError(data.error);
+        notify.error('Scraping failed', data.error);
         setIsScraping(false);
       } else {
         setScrapedData(data);
         setStep('review');
+        notify.success('Data scraped', 'Product data extracted successfully');
         setIsScraping(false);
       }
     } catch (err) {
       setError('Scraping failed. Please try again.');
+      notify.error('Scraping failed', 'Please try again');
       setIsScraping(false);
     }
   }, []);
@@ -93,13 +104,24 @@ export default function NewRetailListerPage() {
     try {
       const rawData = scrapedData as {
         extracted?: { brand?: string; title?: string; price?: number; description?: string };
-        jsonLd?: { brand?: string; name?: string; sku?: string; description?: string; offers?: { price?: string } };
+        jsonLd?: { brand?: unknown; name?: unknown; sku?: string; description?: string; offers?: { price?: string } };
         htmlParsed?: { brand?: string; title?: string; price?: string; description?: string };
       };
 
-      // Use extracted data first, fallback to jsonLd/htmlParsed
-      const brand = rawData.extracted?.brand || rawData.jsonLd?.brand || rawData.htmlParsed?.brand || 'Unknown';
-      const title = rawData.extracted?.title || rawData.jsonLd?.name || rawData.htmlParsed?.title || 'Unknown';
+      // Helper to extract string from potentially complex JSON-LD values
+      const extractString = (value: unknown): string | null => {
+        if (!value) return null;
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object' && value !== null) {
+          const obj = value as Record<string, unknown>;
+          if (obj.name && typeof obj.name === 'string') return obj.name;
+        }
+        return null;
+      };
+
+      // Use extracted data first (already processed), fallback to jsonLd/htmlParsed
+      const brand = rawData.extracted?.brand || extractString(rawData.jsonLd?.brand) || rawData.htmlParsed?.brand || 'Unknown';
+      const title = rawData.extracted?.title || extractString(rawData.jsonLd?.name) || rawData.htmlParsed?.title || 'Unknown';
       const price = rawData.extracted?.price || parseFloat(rawData.jsonLd?.offers?.price || rawData.htmlParsed?.price || '0') || 0;
       const description = rawData.extracted?.description || rawData.htmlParsed?.description || rawData.jsonLd?.description || null;
 
@@ -122,11 +144,14 @@ export default function NewRetailListerPage() {
 
       if (data.error) {
         setError(data.error);
+        notify.error('Create failed', data.error);
       } else {
+        notify.success('Listing created', 'Redirecting to inventory item...');
         router.push(`/inventory/${data.item.id}`);
       }
     } catch (err) {
       setError('Failed to create listing.');
+      notify.error('Create failed', 'Failed to create listing');
     }
   }, [scrapedData, selectedUrl, router]);
 
@@ -296,11 +321,23 @@ export default function NewRetailListerPage() {
               {(() => {
                 const data = scrapedData as {
                   extracted?: { brand?: string; title?: string; price?: number; description?: string; hasJsonLd?: boolean; imageCount?: number; specCount?: number };
-                  jsonLd?: { brand?: string; name?: string };
+                  jsonLd?: { brand?: unknown; name?: unknown };
                   htmlParsed?: { brand?: string; title?: string };
                 };
-                const brand = data.extracted?.brand || data.jsonLd?.brand || data.htmlParsed?.brand;
-                const title = data.extracted?.title || data.jsonLd?.name || data.htmlParsed?.title;
+                
+                // Helper to extract string from potentially complex JSON-LD values
+                const extractString = (value: unknown): string | null => {
+                  if (!value) return null;
+                  if (typeof value === 'string') return value;
+                  if (typeof value === 'object' && value !== null) {
+                    const obj = value as Record<string, unknown>;
+                    if (obj.name && typeof obj.name === 'string') return obj.name;
+                  }
+                  return null;
+                };
+                
+                const brand = data.extracted?.brand || extractString(data.jsonLd?.brand) || data.htmlParsed?.brand;
+                const title = data.extracted?.title || extractString(data.jsonLd?.name) || data.htmlParsed?.title;
                 const price = data.extracted?.price;
 
                 return (

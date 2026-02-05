@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateProductContent } from '@/lib/ai/copywriter';
-import type { RawScrapedData } from '@/types';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
+import type { RawScrapedData, InventoryItem } from '@/types';
 
 /**
  * AI Content Generation endpoint
@@ -11,6 +12,23 @@ import type { RawScrapedData } from '@/types';
  * Body: { productId: string }
  */
 export async function POST(request: NextRequest) {
+  // Rate limit check for Anthropic API
+  const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+  const rateCheck = checkRateLimit(rateLimiters.anthropic, clientIp);
+  
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limited. Please try again later.', retryAfter: rateCheck.retryAfter },
+      { 
+        status: 429,
+        headers: {
+          'Retry-After': String(rateCheck.retryAfter),
+          'X-RateLimit-Remaining': String(rateCheck.remaining),
+        },
+      }
+    );
+  }
+
   try {
     const { productId } = await request.json();
 
@@ -31,50 +49,49 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get the product entry
-    const { data: product, error: fetchError } = await supabase
-      .from('product_onboarding')
+    // Get the inventory item
+    const { data: item, error: fetchError } = await supabase
+      .from('inventory_items')
       .select('*')
       .eq('id', productId)
       .single();
 
-    if (fetchError || !product) {
+    if (fetchError || !item) {
       return NextResponse.json(
-        { error: 'Product not found' },
+        { error: 'Inventory item not found' },
         { status: 404 }
       );
     }
 
-    if (!product.raw_scraped_json) {
-      return NextResponse.json(
-        { error: 'Product has no scraped data. Please extract data first.' },
-        { status: 400 }
-      );
-    }
-
-    const rawData = product.raw_scraped_json as RawScrapedData;
+    // Build raw data from specifications or use empty object
+    const rawData: RawScrapedData = {
+      htmlParsed: {
+        title: item.title || `${item.brand} ${item.model}`,
+        description: item.description_html || '',
+        specifications: (item.specifications as Record<string, string>) || {},
+        images: item.image_urls || [],
+      },
+    };
 
     // Generate AI content
     const aiContent = await generateProductContent({
-      brand: product.brand,
-      modelNumber: product.model_number,
+      brand: item.brand,
+      modelNumber: item.model,
       rawData,
-      rrpAud: product.rrp_aud,
+      rrpAud: item.rrp_aud,
     });
 
-    // Update the product with generated content
-    const { data: updatedProduct, error: updateError } = await supabase
-      .from('product_onboarding')
+    // Update the inventory item with generated content
+    const { data: updatedItem, error: updateError } = await supabase
+      .from('inventory_items')
       .update({
         title: aiContent.title,
         description_html: aiContent.descriptionHtml,
-        // Store alt texts in raw_scraped_json for now
-        raw_scraped_json: {
-          ...rawData,
-          aiGenerated: {
-            title: aiContent.title,
-            metaDescription: aiContent.metaDescription,
-            descriptionHtml: aiContent.descriptionHtml,
+        meta_description: aiContent.metaDescription,
+        // Store additional AI data in specifications
+        specifications: {
+          ...(item.specifications || {}),
+          _aiGenerated: {
             altTexts: aiContent.altTexts,
             generatedAt: new Date().toISOString(),
           },
@@ -90,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      product: updatedProduct,
+      item: updatedItem,
       generated: {
         title: aiContent.title,
         titleLength: aiContent.title.length,

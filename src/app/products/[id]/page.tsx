@@ -9,6 +9,7 @@ import { PricingCalculator } from '@/components/products/PricingCalculator';
 import { SpecificationsEditor, SpecificationsDisplay } from '@/components/products/SpecificationsEditor';
 import { RawSpecsEditor } from '@/components/products/RawSpecsEditor';
 import { ProductPreview } from '@/components/products/ProductPreview';
+import { notify } from '@/lib/store/app-store';
 import type { ProductOnboarding, RawScrapedData, CategorizedSpecifications } from '@/types';
 
 interface ProductPageProps {
@@ -122,8 +123,10 @@ export default function ProductPage({ params }: ProductPageProps) {
 
       setProduct(data.product);
       setExtractionResult(data.extracted);
+      notify.success('Data scraped', `Found ${data.extracted?.specCount || 0} specs, ${data.extracted?.imageCount || 0} images`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Scraping failed');
+      notify.error('Scraping failed', err instanceof Error ? err.message : 'Please try again');
     } finally {
       setIsScraping(false);
     }
@@ -148,8 +151,10 @@ export default function ProductPage({ params }: ProductPageProps) {
 
       setProduct(data.product);
       setGenerationResult(data.generated);
+      notify.success('Content generated', 'SEO title, description, and meta tags created');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI generation failed');
+      notify.error('Generation failed', err instanceof Error ? err.message : 'Please try again');
     } finally {
       setIsGenerating(false);
     }
@@ -176,8 +181,10 @@ export default function ProductPage({ params }: ProductPageProps) {
       }
 
       setProduct(data.product);
+      notify.success('Pricing saved', `Sale price: $${salesPrice.toLocaleString()}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save pricing');
+      notify.error('Save failed', err instanceof Error ? err.message : 'Failed to save pricing');
     } finally {
       setIsSavingPricing(false);
     }
@@ -206,8 +213,10 @@ export default function ProductPage({ params }: ProductPageProps) {
         failed: data.results.failed,
         total: data.results.total,
       });
+      notify.success('Images processed', `${data.results.processed}/${data.results.total} images converted to WebP`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Image processing failed');
+      notify.error('Processing failed', err instanceof Error ? err.message : 'Image processing failed');
     } finally {
       setIsProcessingImages(false);
     }
@@ -236,8 +245,10 @@ export default function ProductPage({ params }: ProductPageProps) {
 
       // Refresh product to get updated data
       await fetchProduct();
+      notify.success('Specs categorized', 'Specifications organized by AI');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to categorize specifications');
+      notify.error('Categorization failed', err instanceof Error ? err.message : 'Please try again');
     } finally {
       setIsCategorizingSpecs(false);
     }
@@ -280,8 +291,10 @@ export default function ProductPage({ params }: ProductPageProps) {
       
       await fetchProduct();
       setDeletedImages(new Set());
+      notify.success('Images updated', 'Image changes saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save image changes');
+      notify.error('Save failed', err instanceof Error ? err.message : 'Failed to save image changes');
     }
   };
 
@@ -310,8 +323,10 @@ export default function ProductPage({ params }: ProductPageProps) {
       
       await fetchProduct();
       setIsEditingRawSpecs(false);
+      notify.success('Specs saved', 'Raw specifications updated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save specifications');
+      notify.error('Save failed', err instanceof Error ? err.message : 'Failed to save specifications');
     } finally {
       setIsSavingSpecs(false);
     }
@@ -338,8 +353,10 @@ export default function ProductPage({ params }: ProductPageProps) {
       // Refresh product and close editor
       await fetchProduct();
       setIsEditingSpecs(false);
+      notify.success('Specs saved', 'Categorized specifications updated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save specifications');
+      notify.error('Save failed', err instanceof Error ? err.message : 'Failed to save specifications');
     } finally {
       setIsSavingSpecs(false);
     }
@@ -369,9 +386,11 @@ export default function ProductPage({ params }: ProductPageProps) {
         success: true, 
         adminUrl: data.shopifyProduct.adminUrl 
       });
+      notify.success('Pushed to Shopify', 'Product created as DRAFT in Shopify');
     } catch (err) {
       if (!shopifyResult?.error) {
         setError(err instanceof Error ? err.message : 'Failed to push to Shopify');
+        notify.error('Shopify sync failed', err instanceof Error ? err.message : 'Please try again');
       }
     } finally {
       setIsPushingToShopify(false);

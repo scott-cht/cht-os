@@ -7,6 +7,8 @@ import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { notify } from '@/lib/store/app-store';
+import { PrintLabelsDialog, usePrintLabelsDialog } from '@/components/labels';
 import type { InventoryItem, ConditionGrade, SyncResult } from '@/types';
 
 const CONDITION_GRADES: { value: ConditionGrade; label: string; color: string }[] = [
@@ -35,7 +37,13 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const printLabelsDialog = usePrintLabelsDialog();
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [aiResult, setAiResult] = useState<{ title: string; metaDescription: string; titleLength: number; metaDescriptionLength: number } | null>(null);
+  const [imageResult, setImageResult] = useState<{ processed: number; failed: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Form state
@@ -81,12 +89,15 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
 
       if (data.error) {
         setError(data.error);
+        notify.error('Save failed', data.error);
       } else {
         setItem(data.item);
         setFormData(data.item);
+        notify.success('Changes saved', 'Item updated successfully');
       }
     } catch (err) {
       setError('Failed to save changes');
+      notify.error('Save failed', 'Failed to save changes');
     } finally {
       setIsSaving(false);
     }
@@ -106,6 +117,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
 
       if (data.error) {
         setError(data.error);
+        notify.error('Sync failed', data.error);
       } else {
         setSyncResult(data.result);
         // Refresh item to get updated sync status
@@ -115,9 +127,11 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
           setItem(refreshData.item);
           setFormData(refreshData.item);
         }
+        notify.success('Sync complete', 'Item synced to platforms');
       }
     } catch (err) {
       setError('Sync failed');
+      notify.error('Sync failed', 'Please try again');
     } finally {
       setIsSyncing(false);
     }
@@ -132,10 +146,125 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
       });
 
       if (response.ok) {
+        notify.success('Item archived', 'Item has been archived');
         router.push('/inventory');
+      } else {
+        notify.error('Archive failed', 'Failed to archive item');
       }
     } catch (err) {
       setError('Failed to delete item');
+      notify.error('Archive failed', 'Failed to archive item');
+    }
+  };
+
+  // Duplicate item
+  const handleDuplicate = async () => {
+    setIsDuplicating(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/inventory/${id}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+        notify.error('Duplicate failed', data.error);
+      } else {
+        notify.success('Item duplicated', 'Opening duplicated item...');
+        router.push(`/inventory/${data.item.id}`);
+      }
+    } catch (err) {
+      setError('Failed to duplicate item');
+      notify.error('Duplicate failed', 'Failed to duplicate item');
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
+  // Generate AI content
+  const handleGenerateContent = async () => {
+    setIsGenerating(true);
+    setError(null);
+    setAiResult(null);
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: id }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+        notify.error('Generation failed', data.error);
+      } else {
+        setAiResult({
+          title: data.generated.title,
+          metaDescription: data.generated.metaDescription,
+          titleLength: data.generated.titleLength,
+          metaDescriptionLength: data.generated.metaDescriptionLength,
+        });
+        // Refresh item data
+        const refreshResponse = await fetch(`/api/inventory/${id}`);
+        const refreshData = await refreshResponse.json();
+        if (refreshData.item) {
+          setItem(refreshData.item);
+          setFormData(refreshData.item);
+        }
+        notify.success('Content generated', 'SEO title and description created');
+      }
+    } catch (err) {
+      setError('AI generation failed');
+      notify.error('Generation failed', 'Please try again');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Process images
+  const handleProcessImages = async () => {
+    setIsProcessingImages(true);
+    setError(null);
+    setImageResult(null);
+
+    try {
+      const response = await fetch('/api/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: id }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+        notify.error('Processing failed', data.error);
+      } else {
+        setImageResult({
+          processed: data.results.processed,
+          failed: data.results.failed,
+        });
+        // Refresh item data
+        const refreshResponse = await fetch(`/api/inventory/${id}`);
+        const refreshData = await refreshResponse.json();
+        if (refreshData.item) {
+          setItem(refreshData.item);
+          setFormData(refreshData.item);
+        }
+        notify.success('Images processed', `${data.results.processed} images converted to WebP`);
+      }
+    } catch (err) {
+      setError('Image processing failed');
+      notify.error('Processing failed', 'Image processing failed');
+    } finally {
+      setIsProcessingImages(false);
     }
   };
 
@@ -193,14 +322,17 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
 
       if (data.error) {
         setError(data.error);
+        notify.error('Conversion failed', data.error);
       } else {
         setItem(data.item);
         setFormData(data.item);
+        notify.success('Converted to sale', 'Item is now ready to sync to platforms');
         // Refresh page to show updated status
         router.refresh();
       }
     } catch (err) {
       setError('Failed to convert to sale');
+      notify.error('Conversion failed', 'Failed to convert to sale');
     } finally {
       setIsConverting(false);
     }
@@ -428,6 +560,21 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
               </div>
             </div>
 
+            {/* Margin Safety Warning for Demo Conversion */}
+            {item.cost_price && formData.sale_price && formData.sale_price < item.cost_price * 1.2 && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3">
+                <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-400">Low Margin Warning</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-500 mt-1">
+                    Below 20% margin floor. Min recommended: ${Math.round(item.cost_price * 1.2).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Convert Button */}
             <Button
               onClick={handleConvertToSale}
@@ -580,6 +727,29 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
                   {Math.round((1 - formData.sale_price / formData.rrp_aud) * 100)}% below RRP
                 </p>
               )}
+
+              {/* Margin Safety Warning */}
+              {formData.cost_price && formData.sale_price && formData.sale_price < formData.cost_price * 1.2 && (
+                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3">
+                  <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-400">
+                      Low Margin Warning
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-500 mt-1">
+                      Sale price is below 20% margin floor. 
+                      Current margin: {formData.cost_price > 0 ? Math.round(((formData.sale_price - formData.cost_price) / formData.cost_price) * 100) : 0}%
+                      {formData.cost_price > 0 && (
+                        <span className="block mt-1">
+                          Minimum recommended: ${Math.round(formData.cost_price * 1.2).toLocaleString()}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -618,6 +788,29 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
               )}
 
               <Button
+                onClick={handleDuplicate}
+                isLoading={isDuplicating}
+                variant="secondary"
+                className="w-full"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                Duplicate Item
+              </Button>
+
+              <Button
+                onClick={printLabelsDialog.open}
+                variant="secondary"
+                className="w-full"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print Label
+              </Button>
+
+              <Button
                 onClick={handleDelete}
                 variant="ghost"
                 className="w-full text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -626,6 +819,67 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
               </Button>
             </div>
           </Card>
+
+          {/* AI Tools */}
+          {item.listing_type === 'new' && (
+            <Card>
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-700">
+                <h2 className="font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span className="text-lg">✨</span> AI Tools
+                </h2>
+              </div>
+              <div className="p-4 space-y-3">
+                <Button
+                  onClick={handleGenerateContent}
+                  isLoading={isGenerating}
+                  variant="secondary"
+                  className="w-full"
+                >
+                  {isGenerating ? 'Generating...' : 'Generate SEO Content'}
+                </Button>
+                <p className="text-xs text-zinc-500">
+                  AI-generated title, meta description, and product copy
+                </p>
+
+                <Button
+                  onClick={handleProcessImages}
+                  isLoading={isProcessingImages}
+                  variant="secondary"
+                  className="w-full"
+                >
+                  {isProcessingImages ? 'Processing...' : 'Process Images'}
+                </Button>
+                <p className="text-xs text-zinc-500">
+                  Convert to WebP, optimize, and upload to storage
+                </p>
+
+                {/* AI Result */}
+                {aiResult && (
+                  <div className="mt-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-2">
+                      ✓ Content Generated
+                    </p>
+                    <div className="space-y-1 text-xs text-emerald-600 dark:text-emerald-500">
+                      <p>Title: {aiResult.titleLength} chars</p>
+                      <p>Meta: {aiResult.metaDescriptionLength} chars</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Image Result */}
+                {imageResult && (
+                  <div className="mt-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 mb-1">
+                      ✓ Images Processed
+                    </p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-500">
+                      {imageResult.processed} processed, {imageResult.failed} failed
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           {/* Status */}
           <Card>
@@ -718,6 +972,15 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
           </Card>
         </div>
       </div>
+
+      {/* Print Labels Dialog */}
+      {item && (
+        <PrintLabelsDialog
+          isOpen={printLabelsDialog.isOpen}
+          onClose={printLabelsDialog.close}
+          items={[item]}
+        />
+      )}
     </Shell>
   );
 }

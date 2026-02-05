@@ -1,13 +1,6 @@
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type Page, type BrowserContextOptions } from 'playwright';
 import type { RawScrapedData } from '@/types';
-
-/**
- * Scraper configuration
- */
-const SCRAPER_CONFIG = {
-  timeout: 30000,
-  userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-};
+import { scrapingConfig } from '@/config';
 
 /**
  * Extract JSON-LD structured data from page
@@ -91,50 +84,102 @@ async function parseHtmlFallback(page: Page): Promise<RawScrapedData['htmlParsed
 }
 
 /**
+ * Build browser launch options with proxy if configured
+ */
+function getBrowserLaunchOptions() {
+  const options: Parameters<typeof chromium.launch>[0] = {
+    headless: true,
+  };
+  
+  // Add proxy if enabled
+  if (scrapingConfig.proxy.enabled && scrapingConfig.proxy.url) {
+    options.proxy = {
+      server: scrapingConfig.proxy.url,
+    };
+  }
+  
+  return options;
+}
+
+/**
+ * Build browser context options
+ */
+function getContextOptions(): BrowserContextOptions {
+  const options: BrowserContextOptions = {
+    userAgent: scrapingConfig.userAgent,
+    locale: 'en-AU',
+    timezoneId: 'Australia/Sydney',
+    // Emulate Australian geolocation (Sydney)
+    geolocation: { latitude: -33.8688, longitude: 151.2093 },
+    permissions: ['geolocation'],
+  };
+  
+  return options;
+}
+
+/**
  * Main scraping function
  * Prioritizes JSON-LD extraction per PRD, falls back to HTML parsing
+ * Per PRD: "Use AU residential proxies to see correct localized pricing/GST"
  */
 export async function scrapeProductPage(url: string): Promise<RawScrapedData> {
   let browser: Browser | null = null;
+  let lastError: Error | null = null;
   
-  try {
-    browser = await chromium.launch({
-      headless: true,
-    });
-    
-    const context = await browser.newContext({
-      userAgent: SCRAPER_CONFIG.userAgent,
-      locale: 'en-AU',
-      timezoneId: 'Australia/Sydney',
-    });
-    
-    const page = await context.newPage();
-    
-    await page.goto(url, {
-      timeout: SCRAPER_CONFIG.timeout,
-      waitUntil: 'domcontentloaded',
-    });
-    
-    // Wait for dynamic content
-    await page.waitForTimeout(2000);
-    
-    // Priority 1: Extract JSON-LD (Source of Truth per PRD)
-    const jsonLd = await extractJsonLd(page);
-    
-    // Priority 2: Fallback to HTML parsing
-    const htmlParsed = await parseHtmlFallback(page);
-    
-    return {
-      jsonLd: jsonLd || undefined,
-      htmlParsed,
-      scrapedAt: new Date().toISOString(),
-      sourceUrl: url,
-    };
-  } finally {
-    if (browser) {
-      await browser.close();
+  // Retry logic with exponential backoff
+  for (let attempt = 1; attempt <= scrapingConfig.retry.maxAttempts; attempt++) {
+    try {
+      browser = await chromium.launch(getBrowserLaunchOptions());
+      
+      const context = await browser.newContext(getContextOptions());
+      
+      const page = await context.newPage();
+      
+      // Set extra headers for Australian requests
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-AU,en;q=0.9',
+      });
+      
+      await page.goto(url, {
+        timeout: scrapingConfig.timeoutMs,
+        waitUntil: 'domcontentloaded',
+      });
+      
+      // Wait for dynamic content
+      await page.waitForTimeout(2000);
+      
+      // Priority 1: Extract JSON-LD (Source of Truth per PRD)
+      const jsonLd = await extractJsonLd(page);
+      
+      // Priority 2: Fallback to HTML parsing
+      const htmlParsed = await parseHtmlFallback(page);
+      
+      return {
+        jsonLd: jsonLd || undefined,
+        htmlParsed,
+        scrapedAt: new Date().toISOString(),
+        sourceUrl: url,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.warn(`Scraping attempt ${attempt} failed:`, lastError.message);
+      
+      // Calculate backoff delay
+      if (attempt < scrapingConfig.retry.maxAttempts) {
+        const delay = scrapingConfig.retry.delayMs * 
+          Math.pow(scrapingConfig.retry.backoffMultiplier, attempt - 1);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    } finally {
+      if (browser) {
+        await browser.close();
+        browser = null;
+      }
     }
   }
+  
+  // All retries failed
+  throw lastError || new Error('Scraping failed after all retries');
 }
 
 /**

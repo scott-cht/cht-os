@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
 import type { RRPSearchResult } from '@/types';
 
 /**
@@ -100,6 +101,23 @@ interface SerpApiResult {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit check for SerpAPI (expensive, limited quota)
+  const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+  const rateCheck = checkRateLimit(rateLimiters.serpapi, clientIp);
+  
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limited. RRP search quota exceeded.', retryAfter: rateCheck.retryAfter },
+      { 
+        status: 429,
+        headers: {
+          'Retry-After': String(rateCheck.retryAfter),
+          'X-RateLimit-Remaining': String(rateCheck.remaining),
+        },
+      }
+    );
+  }
+
   try {
     const { brand, model } = await request.json();
 

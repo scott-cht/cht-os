@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
+import { AnalyticsDashboard } from '@/components/analytics';
 import type { InventoryItem } from '@/types';
 
 interface DashboardStats {
@@ -12,6 +13,12 @@ interface DashboardStats {
   preOwned: number;
   pendingSync: number;
   syncedToday: number;
+}
+
+interface IntegrationStatus {
+  shopify: { configured: boolean; status: string; needsAuth?: boolean };
+  hubspot: { configured: boolean; status: string };
+  notion: { configured: boolean; status: string };
 }
 
 export default function DashboardPage() {
@@ -23,30 +30,45 @@ export default function DashboardPage() {
     syncedToday: 0,
   });
   const [recentItems, setRecentItems] = useState<InventoryItem[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationStatus>({
+    shopify: { configured: false, status: 'not_configured' },
+    hubspot: { configured: false, status: 'not_configured' },
+    notion: { configured: false, status: 'not_configured' },
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch('/api/inventory?limit=5');
-        const data = await response.json();
+        // Fetch stats, recent items, and integration status in parallel
+        const [statsRes, inventoryRes, integrationsRes] = await Promise.all([
+          fetch('/api/inventory/stats'),
+          fetch('/api/inventory?limit=5'),
+          fetch('/api/integrations/status'),
+        ]);
         
-        if (data.items) {
-          setRecentItems(data.items);
-          
-          // Calculate stats
-          const items = data.items as InventoryItem[];
+        const statsData = await statsRes.json();
+        const inventoryData = await inventoryRes.json();
+        const integrationsData = await integrationsRes.json();
+        
+        // Set stats from dedicated endpoint (accurate counts)
+        if (statsData && !statsData.error) {
           setStats({
-            totalItems: items.length,
-            newRetail: items.filter(i => i.listing_type === 'new').length,
-            preOwned: items.filter(i => i.listing_type !== 'new').length,
-            pendingSync: items.filter(i => i.sync_status === 'pending').length,
-            syncedToday: items.filter(i => {
-              if (!i.last_synced_at) return false;
-              const today = new Date().toDateString();
-              return new Date(i.last_synced_at).toDateString() === today;
-            }).length,
+            totalItems: statsData.totalItems,
+            newRetail: statsData.newRetail,
+            preOwned: statsData.preOwned,
+            pendingSync: statsData.pendingSync,
+            syncedToday: statsData.syncedToday,
           });
+        }
+        
+        // Set recent items for display
+        if (inventoryData.items) {
+          setRecentItems(inventoryData.items);
+        }
+        
+        if (integrationsData) {
+          setIntegrations(integrationsData);
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
@@ -142,6 +164,11 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Analytics Charts */}
+      <div className="mb-8">
+        <AnalyticsDashboard />
+      </div>
+
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Items */}
@@ -216,8 +243,12 @@ export default function DashboardPage() {
           <div className="p-4 space-y-4">
             {/* Shopify */}
             <div className="flex items-center gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
-              <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" viewBox="0 0 24 24" fill="currentColor">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                integrations.shopify.configured 
+                  ? 'bg-green-100 dark:bg-green-900/30' 
+                  : 'bg-zinc-200 dark:bg-zinc-700'
+              }`}>
+                <svg className={`w-6 h-6 ${integrations.shopify.configured ? 'text-green-600' : 'text-zinc-400'}`} viewBox="0 0 24 24" fill="currentColor">
                   <path d="M15.337 3.416c-.194-.066-.488.009-.637.159-.149.15-.252.47-.252.47l-.927 2.836s-1.078-.198-1.553-.198c-1.301 0-1.382 1.146-1.382 1.146l-.006 5.573c0 .19.155.342.346.342h.694c.19 0 .345-.153.345-.342v-3.03h.866v3.03c0 .19.155.342.345.342h.694c.19 0 .345-.153.345-.342v-3.03h.866v3.03c0 .19.155.342.345.342h.694c.19 0 .346-.153.346-.342V7.83s-.082-1.146-1.383-1.146c-.475 0-1.553.198-1.553.198l.928-2.836s.103-.32-.117-.63z"/>
                 </svg>
               </div>
@@ -225,15 +256,32 @@ export default function DashboardPage() {
                 <p className="font-medium text-zinc-900 dark:text-white">Shopify</p>
                 <p className="text-sm text-zinc-500">Push products as DRAFT</p>
               </div>
-              <span className="px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                Ready
-              </span>
+              {integrations.shopify.needsAuth ? (
+                <a
+                  href="/api/shopify/auth"
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+                >
+                  Connect
+                </a>
+              ) : (
+                <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                  integrations.shopify.configured 
+                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+                }`}>
+                  {integrations.shopify.configured ? 'Ready' : 'Not configured'}
+                </span>
+              )}
             </div>
 
             {/* HubSpot */}
             <div className="flex items-center gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
-              <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                <svg className="w-6 h-6 text-orange-600" viewBox="0 0 24 24" fill="currentColor">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                integrations.hubspot.configured 
+                  ? 'bg-orange-100 dark:bg-orange-900/30' 
+                  : 'bg-zinc-200 dark:bg-zinc-700'
+              }`}>
+                <svg className={`w-6 h-6 ${integrations.hubspot.configured ? 'text-orange-600' : 'text-zinc-400'}`} viewBox="0 0 24 24" fill="currentColor">
                   <path d="M22.08 14.436l-.033-.082-.001-.002-.001-.002-.001-.002-.001-.001-.001-.002-2.698-6.699c-.275-.678-.803-1.227-1.47-1.527-.665-.3-1.418-.335-2.105-.098l-.003.001-11.53 3.988-.003.001c-.7.243-1.278.748-1.612 1.405-.334.656-.397 1.414-.174 2.114l.001.003 2.697 6.699.001.002.001.003c.276.679.804 1.227 1.47 1.527.666.3 1.419.335 2.106.098l.003-.001 11.53-3.988.003-.001c.7-.243 1.278-.748 1.612-1.405.335-.656.397-1.415.175-2.115l-.001-.002-.001-.003z"/>
                 </svg>
               </div>
@@ -241,15 +289,23 @@ export default function DashboardPage() {
                 <p className="font-medium text-zinc-900 dark:text-white">HubSpot</p>
                 <p className="text-sm text-zinc-500">Create deals for trade-ins</p>
               </div>
-              <span className="px-3 py-1 text-xs font-medium rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                Not configured
+              <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                integrations.hubspot.configured 
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+              }`}>
+                {integrations.hubspot.configured ? 'Ready' : 'Not configured'}
               </span>
             </div>
 
             {/* Notion */}
             <div className="flex items-center gap-4 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
-              <div className="w-10 h-10 rounded-lg bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center">
-                <svg className="w-6 h-6 text-zinc-600 dark:text-zinc-400" viewBox="0 0 24 24" fill="currentColor">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                integrations.notion.configured 
+                  ? 'bg-zinc-800 dark:bg-zinc-200' 
+                  : 'bg-zinc-200 dark:bg-zinc-700'
+              }`}>
+                <svg className={`w-6 h-6 ${integrations.notion.configured ? 'text-white dark:text-zinc-800' : 'text-zinc-400'}`} viewBox="0 0 24 24" fill="currentColor">
                   <path d="M4 4.5A1.5 1.5 0 0 1 5.5 3h13A1.5 1.5 0 0 1 20 4.5v2.286a1.5 1.5 0 0 1-.645 1.233l-5.855 4.073v6.037a1.5 1.5 0 0 1-.645 1.233l-2 1.393A1.5 1.5 0 0 1 8.5 19.5v-7.621L2.645 7.805A1.5 1.5 0 0 1 2 6.572V4.5z"/>
                 </svg>
               </div>
@@ -257,8 +313,12 @@ export default function DashboardPage() {
                 <p className="font-medium text-zinc-900 dark:text-white">Notion</p>
                 <p className="text-sm text-zinc-500">Global inventory log</p>
               </div>
-              <span className="px-3 py-1 text-xs font-medium rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                Not configured
+              <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                integrations.notion.configured 
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+              }`}>
+                {integrations.notion.configured ? 'Ready' : 'Not configured'}
               </span>
             </div>
           </div>

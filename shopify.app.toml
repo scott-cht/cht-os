@@ -2,17 +2,19 @@
 
 client_id = "e3350967dfac68ee8ea0beaebc53d4b4"
 name = "Product Scout"
-application_url = "https://example.com"
-embedded = true
+application_url = "http://localhost:3000"
+embedded = false
 
 [webhooks]
 api_version = "2026-01"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,read_products"
+scopes = "write_products,read_products,write_inventory,read_inventory"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [
+  "http://localhost:3000/api/shopify/auth/callback"
+]

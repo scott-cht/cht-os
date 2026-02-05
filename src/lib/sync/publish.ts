@@ -8,6 +8,8 @@
  */
 
 import type { InventoryItem, SyncResult } from '@/types';
+import { withRetry, isNetworkError } from '@/lib/utils/retry';
+import { config } from '@/config';
 
 interface ShopifyConfig {
   storeDomain: string;
@@ -26,9 +28,23 @@ interface NotionConfig {
 }
 
 /**
+ * Progress callbacks for real-time updates
+ */
+interface SyncProgressCallbacks {
+  onPlatformStart?: (platform: 'shopify' | 'hubspot' | 'notion') => Promise<void>;
+  onPlatformComplete?: (
+    platform: 'shopify' | 'hubspot' | 'notion',
+    result: { success: boolean; productId?: string; dealId?: string; pageId?: string; error?: string }
+  ) => Promise<void>;
+}
+
+/**
  * Main publish function - orchestrates sync to all platforms
  */
-export async function publishProduct(item: InventoryItem): Promise<SyncResult> {
+export async function publishProduct(
+  item: InventoryItem,
+  callbacks?: SyncProgressCallbacks
+): Promise<SyncResult> {
   const result: SyncResult = {
     success: true,
     errors: [],
@@ -36,28 +52,49 @@ export async function publishProduct(item: InventoryItem): Promise<SyncResult> {
 
   // 1. Sync to Shopify
   try {
+    await callbacks?.onPlatformStart?.('shopify');
     const shopifyResult = await syncToShopify(item);
     result.shopify = shopifyResult;
+    await callbacks?.onPlatformComplete?.('shopify', { 
+      success: true, 
+      productId: shopifyResult.product_id 
+    });
   } catch (error) {
-    result.errors?.push(`Shopify: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    result.errors?.push(`Shopify: ${errorMsg}`);
+    await callbacks?.onPlatformComplete?.('shopify', { success: false, error: errorMsg });
   }
 
   // 2. Sync to HubSpot (only for trade-ins/ex-demo)
   if (item.listing_type !== 'new') {
     try {
+      await callbacks?.onPlatformStart?.('hubspot');
       const hubspotResult = await syncToHubSpot(item);
       result.hubspot = hubspotResult;
+      await callbacks?.onPlatformComplete?.('hubspot', { 
+        success: true, 
+        dealId: hubspotResult.deal_id 
+      });
     } catch (error) {
-      result.errors?.push(`HubSpot: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      result.errors?.push(`HubSpot: ${errorMsg}`);
+      await callbacks?.onPlatformComplete?.('hubspot', { success: false, error: errorMsg });
     }
   }
 
   // 3. Sync to Notion
   try {
+    await callbacks?.onPlatformStart?.('notion');
     const notionResult = await syncToNotion(item);
     result.notion = notionResult;
+    await callbacks?.onPlatformComplete?.('notion', { 
+      success: true, 
+      pageId: notionResult.page_id 
+    });
   } catch (error) {
-    result.errors?.push(`Notion: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    result.errors?.push(`Notion: ${errorMsg}`);
+    await callbacks?.onPlatformComplete?.('notion', { success: false, error: errorMsg });
   }
 
   // Set overall success based on errors
@@ -75,10 +112,30 @@ async function syncToShopify(item: InventoryItem): Promise<{
   admin_url: string;
 }> {
   const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
-  const accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+  
+  // Get access token - either from env var or OAuth token in database
+  let accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+  
+  if (!accessToken) {
+    // Try to get OAuth token from database
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data } = await supabase
+      .from('oauth_tokens')
+      .select('access_token')
+      .eq('provider', 'shopify')
+      .eq('shop', storeDomain)
+      .single();
+    
+    accessToken = data?.access_token;
+  }
 
   if (!storeDomain || !accessToken) {
-    throw new Error('Shopify credentials not configured');
+    throw new Error('Shopify credentials not configured. Please connect Shopify from the dashboard.');
   }
 
   // Build tags
@@ -166,14 +223,21 @@ async function syncToShopify(item: InventoryItem): Promise<{
     },
   };
 
-  const response = await fetch(`https://${storeDomain}/admin/api/2024-01/graphql.json`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': accessToken,
-    },
-    body: JSON.stringify({ query: mutation, variables }),
-  });
+  const response = await withRetry(
+    () => fetch(`https://${storeDomain}/admin/api/${config.shopify.apiVersion}/graphql.json`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': accessToken,
+      },
+      body: JSON.stringify({ query: mutation, variables }),
+    }),
+    {
+      retries: 3,
+      isRetryable: isNetworkError,
+      onRetry: (err, attempt) => console.log(`Shopify retry ${attempt}:`, err),
+    }
+  );
 
   const result = await response.json();
 
@@ -197,45 +261,93 @@ async function syncToShopify(item: InventoryItem): Promise<{
 }
 
 /**
+ * Get HubSpot access token via OAuth client credentials
+ */
+async function getHubSpotAccessToken(): Promise<string> {
+  // First check for direct access token (legacy private app)
+  if (process.env.HUBSPOT_ACCESS_TOKEN && process.env.HUBSPOT_ACCESS_TOKEN.startsWith('pat-')) {
+    return process.env.HUBSPOT_ACCESS_TOKEN;
+  }
+
+  // Use OAuth client credentials flow
+  const clientId = process.env.HUBSPOT_CLIENT_ID;
+  const clientSecret = process.env.HUBSPOT_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('HubSpot credentials not configured. Set HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET, or HUBSPOT_ACCESS_TOKEN');
+  }
+
+  const response = await withRetry(
+    () => fetch('https://api.hubapi.com/oauth/v1/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    }),
+    {
+      retries: 3,
+      isRetryable: isNetworkError,
+      onRetry: (err, attempt) => console.log(`HubSpot OAuth retry ${attempt}:`, err),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`HubSpot OAuth failed: ${error.message || 'Unknown error'}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
+/**
  * Sync to HubSpot - Create Deal in Inventory Intake pipeline
  */
 async function syncToHubSpot(item: InventoryItem): Promise<{
   deal_id: string;
   deal_url: string;
 }> {
-  const accessToken = process.env.HUBSPOT_ACCESS_TOKEN;
+  const accessToken = await getHubSpotAccessToken();
   const pipelineId = process.env.HUBSPOT_PIPELINE_ID || 'default';
   const stageId = process.env.HUBSPOT_INTAKE_STAGE_ID || 'appointmentscheduled';
 
-  if (!accessToken) {
-    throw new Error('HubSpot credentials not configured');
-  }
-
   const dealName = `${item.listing_type === 'trade_in' ? 'Trade-In' : 'Ex-Demo'}: ${item.brand} ${item.model}`;
 
-  const response = await fetch('https://api.hubapi.com/crm/v3/objects/deals', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      properties: {
-        dealname: dealName,
-        pipeline: pipelineId,
-        dealstage: stageId,
-        amount: item.sale_price.toString(),
-        // Custom properties (must be created in HubSpot first)
-        cht_brand: item.brand,
-        cht_model: item.model,
-        cht_serial_number: item.serial_number || '',
-        cht_condition_grade: item.condition_grade || '',
-        cht_condition_report: item.condition_report || '',
-        cht_rrp: item.rrp_aud?.toString() || '',
-        cht_listing_type: item.listing_type,
+  const response = await withRetry(
+    () => fetch('https://api.hubapi.com/crm/v3/objects/deals', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
       },
+      body: JSON.stringify({
+        properties: {
+          dealname: dealName,
+          pipeline: pipelineId,
+          dealstage: stageId,
+          amount: item.sale_price.toString(),
+          // Custom properties (must be created in HubSpot first)
+          cht_brand: item.brand,
+          cht_model: item.model,
+          cht_serial_number: item.serial_number || '',
+          cht_condition_grade: item.condition_grade || '',
+          cht_condition_report: item.condition_report || '',
+          cht_rrp: item.rrp_aud?.toString() || '',
+          cht_listing_type: item.listing_type,
+        },
+      }),
     }),
-  });
+    {
+      retries: 3,
+      isRetryable: isNetworkError,
+      onRetry: (err, attempt) => console.log(`HubSpot deal retry ${attempt}:`, err),
+    }
+  );
 
   if (!response.ok) {
     const error = await response.json();
@@ -264,54 +376,61 @@ async function syncToNotion(item: InventoryItem): Promise<{
     throw new Error('Notion credentials not configured');
   }
 
-  const response = await fetch('https://api.notion.com/v1/pages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-      'Notion-Version': '2022-06-28',
-    },
-    body: JSON.stringify({
-      parent: { database_id: databaseId },
-      properties: {
-        // Title property (required for Notion databases)
-        'Name': {
-          title: [{ text: { content: `${item.brand} ${item.model}` } }],
-        },
-        // Other properties (column names must match your Notion database)
-        'Brand': {
-          select: { name: item.brand },
-        },
-        'Model': {
-          rich_text: [{ text: { content: item.model } }],
-        },
-        'Type': {
-          select: { name: item.listing_type === 'new' ? 'New' : item.listing_type === 'trade_in' ? 'Trade-In' : 'Ex-Demo' },
-        },
-        'Serial Number': {
-          rich_text: [{ text: { content: item.serial_number || 'N/A' } }],
-        },
-        'RRP': {
-          number: item.rrp_aud || 0,
-        },
-        'Sale Price': {
-          number: item.sale_price,
-        },
-        'Condition': {
-          select: item.condition_grade ? { name: item.condition_grade.charAt(0).toUpperCase() + item.condition_grade.slice(1) } : undefined,
-        },
-        'Status': {
-          select: { name: 'Listed' },
-        },
-        'Shopify ID': {
-          rich_text: [{ text: { content: item.shopify_product_id || '' } }],
-        },
-        'Created': {
-          date: { start: new Date().toISOString() },
-        },
+  const response = await withRetry(
+    () => fetch('https://api.notion.com/v1/pages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Notion-Version': '2022-06-28',
       },
+      body: JSON.stringify({
+        parent: { database_id: databaseId },
+        properties: {
+          // Title property (required for Notion databases)
+          'Name': {
+            title: [{ text: { content: `${item.brand} ${item.model}` } }],
+          },
+          // Other properties (column names must match your Notion database)
+          'Brand': {
+            select: { name: item.brand },
+          },
+          'Model': {
+            rich_text: [{ text: { content: item.model } }],
+          },
+          'Type': {
+            select: { name: item.listing_type === 'new' ? 'New' : item.listing_type === 'trade_in' ? 'Trade-In' : 'Ex-Demo' },
+          },
+          'Serial Number': {
+            rich_text: [{ text: { content: item.serial_number || 'N/A' } }],
+          },
+          'RRP': {
+            number: item.rrp_aud || 0,
+          },
+          'Sale Price': {
+            number: item.sale_price,
+          },
+          'Condition': {
+            select: item.condition_grade ? { name: item.condition_grade.charAt(0).toUpperCase() + item.condition_grade.slice(1) } : undefined,
+          },
+          'Status': {
+            select: { name: 'Listed' },
+          },
+          'Shopify ID': {
+            rich_text: [{ text: { content: item.shopify_product_id || '' } }],
+          },
+          'Created': {
+            date: { start: new Date().toISOString() },
+          },
+        },
+      }),
     }),
-  });
+    {
+      retries: 3,
+      isRetryable: isNetworkError,
+      onRetry: (err, attempt) => console.log(`Notion retry ${attempt}:`, err),
+    }
+  );
 
   if (!response.ok) {
     const error = await response.json();

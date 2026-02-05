@@ -1,8 +1,7 @@
 import sharp from 'sharp';
 import { createClient } from '@supabase/supabase-js';
 import type { ProcessedImage } from '@/types';
-
-const STORAGE_BUCKET = 'product-images';
+import { config } from '@/config';
 
 /**
  * Slugify text for SEO-friendly filenames
@@ -53,7 +52,11 @@ export async function convertToWebp(
     maxHeight?: number;
   } = {}
 ): Promise<{ buffer: Buffer; width: number; height: number }> {
-  const { quality = 80, maxWidth = 2000, maxHeight = 2000 } = options;
+  const { 
+    quality = config.images.quality, 
+    maxWidth = config.images.maxWidth, 
+    maxHeight = config.images.maxHeight 
+  } = options;
   
   let pipeline = sharp(imageBuffer);
   
@@ -100,7 +103,7 @@ export async function uploadToStorage(
   
   // Upload to Supabase Storage
   const { error: uploadError } = await supabase.storage
-    .from(STORAGE_BUCKET)
+    .from(config.images.bucket)
     .upload(storagePath, buffer, {
       contentType: 'image/webp',
       upsert: true, // Overwrite if exists
@@ -112,7 +115,7 @@ export async function uploadToStorage(
   
   // Get public URL
   const { data: { publicUrl } } = supabase.storage
-    .from(STORAGE_BUCKET)
+    .from(config.images.bucket)
     .getPublicUrl(storagePath);
   
   return { storagePath, publicUrl };

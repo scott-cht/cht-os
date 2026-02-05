@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
+import { config } from '@/config';
 import type { VisionAIResponse } from '@/types';
 
 /**
@@ -57,6 +59,23 @@ Respond with ONLY valid JSON in this exact format:
 }`;
 
 export async function POST(request: NextRequest) {
+  // Rate limit check for Anthropic Vision API (expensive)
+  const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+  const rateCheck = checkRateLimit(rateLimiters.anthropic, clientIp);
+  
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limited. Please try again later.', retryAfter: rateCheck.retryAfter },
+      { 
+        status: 429,
+        headers: {
+          'Retry-After': String(rateCheck.retryAfter),
+          'X-RateLimit-Remaining': String(rateCheck.remaining),
+        },
+      }
+    );
+  }
+
   try {
     const { image } = await request.json();
 
@@ -104,8 +123,8 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await getAnthropic().messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
+      model: config.ai.visionModel,
+      max_tokens: config.ai.maxTokens,
       messages: [
         {
           role: 'user',

@@ -1,11 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { 
+  ExportButton, 
+  ImportDialog, 
+  useImportDialog,
+  FilterPresetsDropdown,
+  SaveFilterDialog,
+  useSaveFilterDialog,
+  ComparisonModal,
+  useComparisonModal,
+} from '@/components/inventory';
+import { PrintLabelsDialog, usePrintLabelsDialog } from '@/components/labels';
+import { notify } from '@/lib/store/app-store';
 import type { InventoryItem, ListingType, SyncStatus } from '@/types';
+import type { InventoryFilters } from '@/types/filters';
 
 type FilterType = 'all' | ListingType;
 type FilterSync = 'all' | SyncStatus;
@@ -16,6 +29,53 @@ export default function InventoryPage() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterSync, setFilterSync] = useState<FilterSync>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const importDialog = useImportDialog();
+  const saveFilterDialog = useSaveFilterDialog();
+  const comparisonModal = useComparisonModal();
+  const printLabelsDialog = usePrintLabelsDialog();
+
+  // Max items for comparison
+  const MAX_COMPARE_ITEMS = 5;
+
+  // Toggle item selection
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < MAX_COMPARE_ITEMS) {
+        next.add(id);
+      } else {
+        notify.warning('Selection limit', `You can compare up to ${MAX_COMPARE_ITEMS} items`);
+        return prev;
+      }
+      return next;
+    });
+  }, []);
+
+  // Get selected items
+  const selectedItems = items.filter(item => selectedIds.has(item.id));
+
+  // Clear selection
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  // Get current filters as InventoryFilters object
+  const currentFilters: InventoryFilters = {
+    listing_type: filterType,
+    sync_status: filterSync,
+    search: searchQuery || undefined,
+  };
+
+  // Apply a filter preset
+  const handleApplyPreset = useCallback((filters: InventoryFilters) => {
+    setFilterType((filters.listing_type as FilterType) || 'all');
+    setFilterSync((filters.sync_status as FilterSync) || 'all');
+    setSearchQuery(filters.search || '');
+    setIsLoading(true);
+  }, []);
 
   useEffect(() => {
     async function fetchInventory() {
@@ -56,6 +116,7 @@ export default function InventoryPage() {
   });
 
   const handleSync = async (itemId: string) => {
+    const item = items.find(i => i.id === itemId);
     try {
       const response = await fetch(`/api/inventory/${itemId}/sync`, {
         method: 'POST',
@@ -64,14 +125,18 @@ export default function InventoryPage() {
       
       if (result.success) {
         // Refresh the list
-        setItems(prev => prev.map(item => 
-          item.id === itemId 
-            ? { ...item, sync_status: 'synced' as SyncStatus }
-            : item
+        setItems(prev => prev.map(i => 
+          i.id === itemId 
+            ? { ...i, sync_status: 'synced' as SyncStatus }
+            : i
         ));
+        notify.success('Sync complete', `${item?.brand} ${item?.model} synced successfully`);
+      } else {
+        notify.error('Sync failed', result.error || 'Please try again');
       }
     } catch (error) {
       console.error('Sync failed:', error);
+      notify.error('Sync failed', 'Please try again');
     }
   };
 
@@ -80,14 +145,54 @@ export default function InventoryPage() {
       title="Inventory" 
       subtitle={`${filteredItems.length} items`}
       headerActions={
-        <Link href="/lister">
-          <Button>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        <div className="flex items-center gap-3">
+          {/* Selection Actions - shows when items selected */}
+          {selectedIds.size > 0 && (
+            <>
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={comparisonModal.open}
+                className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+              >
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Compare ({selectedIds.size})
+              </Button>
+              <Button 
+                variant="secondary" 
+                size="sm"
+                onClick={printLabelsDialog.open}
+              >
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print ({selectedIds.size})
+              </Button>
+            </>
+          )}
+          <FilterPresetsDropdown
+            currentFilters={currentFilters}
+            onApplyPreset={handleApplyPreset}
+            onSaveClick={saveFilterDialog.open}
+          />
+          <Button variant="secondary" size="sm" onClick={importDialog.open}>
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            New Listing
+            Import
           </Button>
-        </Link>
+          <ExportButton items={filteredItems} />
+          <Link href="/lister">
+            <Button>
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Listing
+            </Button>
+          </Link>
+        </div>
       }
     >
       {/* Filters */}
@@ -172,8 +277,26 @@ export default function InventoryPage() {
         </Card>
       ) : (
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+          {/* Selection Info Bar */}
+          {selectedIds.size > 0 && (
+            <div className="px-6 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
+              <span className="text-sm text-blue-700 dark:text-blue-300">
+                {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
+              </span>
+              <button
+                onClick={clearSelection}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+
           {/* Table Header */}
-          <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-500">
+          <div className="grid grid-cols-13 gap-4 px-6 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700 text-sm font-medium text-zinc-500">
+            <div className="col-span-1 flex items-center">
+              <span className="sr-only">Select</span>
+            </div>
             <div className="col-span-4">Product</div>
             <div className="col-span-2">Type</div>
             <div className="col-span-2 text-right">Price</div>
@@ -183,8 +306,40 @@ export default function InventoryPage() {
 
           {/* Table Body */}
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {filteredItems.map((item) => (
-              <div key={item.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+            {filteredItems.map((item) => {
+              const isSelected = selectedIds.has(item.id);
+              return (
+              <div 
+                key={item.id} 
+                className={`grid grid-cols-13 gap-4 px-6 py-4 items-center transition-colors ${
+                  isSelected 
+                    ? 'bg-blue-50/50 dark:bg-blue-900/10' 
+                    : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/30'
+                }`}
+              >
+                {/* Checkbox */}
+                <div className="col-span-1 flex items-center">
+                  <label className="relative flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelection(item.id)}
+                      className="sr-only peer"
+                    />
+                    <div className={`w-5 h-5 rounded border-2 transition-all flex items-center justify-center ${
+                      isSelected
+                        ? 'bg-blue-500 border-blue-500'
+                        : 'border-zinc-300 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-500'
+                    }`}>
+                      {isSelected && (
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </label>
+                </div>
+
                 {/* Product */}
                 <div className="col-span-4 flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0 ${
@@ -265,10 +420,48 @@ export default function InventoryPage() {
                   </Link>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}
+
+      {/* Comparison Modal */}
+      <ComparisonModal
+        isOpen={comparisonModal.isOpen}
+        onClose={comparisonModal.close}
+        items={selectedItems}
+        onClearSelection={clearSelection}
+      />
+
+      {/* Import Dialog */}
+      <ImportDialog
+        isOpen={importDialog.isOpen}
+        onClose={importDialog.close}
+        onSuccess={() => {
+          // Trigger refetch by updating filter (will re-run useEffect)
+          setFilterType('all');
+          setFilterSync('all');
+          setIsLoading(true);
+        }}
+      />
+
+      {/* Save Filter Dialog */}
+      <SaveFilterDialog
+        isOpen={saveFilterDialog.isOpen}
+        onClose={saveFilterDialog.close}
+        filters={currentFilters}
+        onSave={() => {
+          // Refresh the presets list (handled internally by the dropdown)
+        }}
+      />
+
+      {/* Print Labels Dialog */}
+      <PrintLabelsDialog
+        isOpen={printLabelsDialog.isOpen}
+        onClose={printLabelsDialog.close}
+        items={selectedItems}
+      />
     </Shell>
   );
 }

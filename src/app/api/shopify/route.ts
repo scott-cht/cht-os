@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if Shopify is configured
-    if (!isShopifyConfigured()) {
+    if (!(await isShopifyConfigured())) {
       return NextResponse.json(
         { 
           error: 'Shopify is not configured. Please add SHOPIFY_STORE_DOMAIN and SHOPIFY_ADMIN_ACCESS_TOKEN to .env.local',
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rawData = product.raw_scraped_json as RawScrapedData | null;
-    const graphqlClient = getGraphQLClient();
+    const graphqlClient = await getGraphQLClient();
 
     if (!graphqlClient) {
       return NextResponse.json(

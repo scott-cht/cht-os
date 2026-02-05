@@ -78,7 +78,8 @@ export async function PATCH(
 }
 
 /**
- * Delete a product by ID
+ * Delete (archive) a product by ID
+ * Uses soft delete for consistency with inventory_items
  * 
  * DELETE /api/products/[id]
  */
@@ -90,21 +91,25 @@ export async function DELETE(
     const { id } = await params;
     const supabase = createServerClient();
 
+    // Soft delete by setting archived flag
     const { error } = await supabase
       .from('product_onboarding')
-      .delete()
+      .update({ 
+        archived: true,
+        status: 'archived',
+      })
       .eq('id', id);
 
     if (error) {
       throw error;
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, archived: true });
 
   } catch (error) {
-    console.error('Delete product error:', error);
+    console.error('Archive product error:', error);
     return NextResponse.json(
-      { error: 'Failed to delete product' },
+      { error: 'Failed to archive product' },
       { status: 500 }
     );
   }

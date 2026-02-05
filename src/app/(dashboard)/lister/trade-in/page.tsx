@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CameraCapture } from '@/components/lister/CameraCapture';
+import { notify } from '@/lib/store/app-store';
 import type { VisionAIResponse, RRPSearchResult, ConditionGrade } from '@/types';
 
 const DEFAULT_DISCOUNT = 0.30;
@@ -61,16 +62,20 @@ export default function TradeInListerPage() {
         setBrand(result.brand || '');
         setModel(result.model || '');
         setSerialNumber(result.serial_number || '');
+        notify.success('Product identified', `${result.brand} ${result.model} (${Math.round(result.confidence * 100)}% confident)`);
 
         // Auto-fetch RRP if we have brand and model
         if (result.brand && result.model) {
           fetchRRP(result.brand, result.model);
         }
+      } else {
+        notify.warning('Identification uncertain', 'Please verify product details');
       }
 
       setStep('details');
     } catch (err) {
       setError('Failed to identify product');
+      notify.error('Identification failed', 'Please enter details manually');
       setStep('details');
     } finally {
       setIsIdentifying(false);
@@ -94,9 +99,13 @@ export default function TradeInListerPage() {
         setRrpAud(result.rrp_aud);
         setRrpSource(result.source);
         setSalePrice(Math.round(result.rrp_aud * (1 - DEFAULT_DISCOUNT)));
+        notify.success('RRP found', `$${result.rrp_aud.toLocaleString()} from ${result.source}`);
+      } else {
+        notify.info('RRP not found', 'Please enter manually');
       }
     } catch (err) {
       console.error('RRP fetch error:', err);
+      notify.error('RRP lookup failed', 'Please enter manually');
     } finally {
       setIsFetchingRRP(false);
     }
@@ -147,11 +156,14 @@ export default function TradeInListerPage() {
 
       if (data.error) {
         setError(data.error);
+        notify.error('Create failed', data.error);
       } else {
+        notify.success('Trade-in created', 'Redirecting to inventory...');
         router.push(`/inventory/${data.item.id}`);
       }
     } catch (err) {
       setError('Failed to create listing');
+      notify.error('Create failed', 'Failed to create trade-in listing');
     } finally {
       setIsCreating(false);
     }

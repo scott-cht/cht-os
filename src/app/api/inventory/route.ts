@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import type { InventoryItemInsert, InventoryItem } from '@/types';
+import { createInventoryItemSchema, ValidationError, validateBody } from '@/lib/validation/schemas';
+import type { InventoryItemInsert } from '@/types';
 
 /**
  * Inventory Items API
@@ -11,14 +12,20 @@ import type { InventoryItemInsert, InventoryItem } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: InventoryItemInsert = await request.json();
+    const rawBody = await request.json();
 
-    // Validate required fields
-    if (!body.listing_type || !body.brand || !body.model || body.sale_price === undefined) {
-      return NextResponse.json(
-        { error: 'Missing required fields: listing_type, brand, model, sale_price' },
-        { status: 400 }
-      );
+    // Validate with Zod schema
+    let body: InventoryItemInsert;
+    try {
+      body = validateBody(createInventoryItemSchema, rawBody) as InventoryItemInsert;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return NextResponse.json(
+          { error: error.message, validationErrors: error.errors },
+          { status: 400 }
+        );
+      }
+      throw error;
     }
 
     const supabase = createServerClient();
@@ -83,34 +90,104 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    
+    // Basic filters
     const listing_type = searchParams.get('listing_type');
     const listing_status = searchParams.get('listing_status');
     const sync_status = searchParams.get('sync_status');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const condition_grade = searchParams.get('condition_grade');
+    
+    // Text search
+    const search = searchParams.get('search');
+    const brand = searchParams.get('brand');
+    
+    // Price range
+    const minPrice = searchParams.get('min_price');
+    const maxPrice = searchParams.get('max_price');
+    
+    // Date range
+    const dateFrom = searchParams.get('date_from');
+    const dateTo = searchParams.get('date_to');
+    
+    // Sorting
+    const sortBy = searchParams.get('sort_by') || 'created_at';
+    const sortOrder = searchParams.get('sort_order') || 'desc';
+    
+    // Pagination with enforced limits (prevent DoS)
+    const requestedLimit = parseInt(searchParams.get('limit') || '50');
+    const limit = Math.min(Math.max(requestedLimit, 1), 100); // Cap between 1-100
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
+    
+    // Include archived
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
     const supabase = createServerClient();
 
+    // Start building query
     let query = supabase
       .from('inventory_items')
-      .select('*')
-      .eq('is_archived', false)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .select('*', { count: 'exact' });
 
-    if (listing_type) {
+    // Archived filter (default: exclude archived)
+    if (!includeArchived) {
+      query = query.eq('is_archived', false);
+    }
+
+    // Basic filters
+    if (listing_type && listing_type !== 'all') {
       query = query.eq('listing_type', listing_type);
     }
 
-    if (listing_status) {
+    if (listing_status && listing_status !== 'all') {
       query = query.eq('listing_status', listing_status);
     }
 
-    if (sync_status) {
+    if (sync_status && sync_status !== 'all') {
       query = query.eq('sync_status', sync_status);
     }
 
-    const { data: items, error: fetchError } = await query;
+    if (condition_grade && condition_grade !== 'all') {
+      query = query.eq('condition_grade', condition_grade);
+    }
+
+    // Brand filter
+    if (brand) {
+      query = query.ilike('brand', brand);
+    }
+
+    // Text search (brand, model, title, serial number)
+    if (search) {
+      query = query.or(`brand.ilike.%${search}%,model.ilike.%${search}%,title.ilike.%${search}%,serial_number.ilike.%${search}%`);
+    }
+
+    // Price range filters
+    if (minPrice) {
+      query = query.gte('sale_price', parseInt(minPrice));
+    }
+    if (maxPrice) {
+      query = query.lte('sale_price', parseInt(maxPrice));
+    }
+
+    // Date range filters
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
+    }
+    if (dateTo) {
+      // Add a day to include the entire end date
+      const endDate = new Date(dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+      query = query.lt('created_at', endDate.toISOString());
+    }
+
+    // Sorting
+    const validSortFields = ['created_at', 'brand', 'model', 'sale_price', 'rrp_aud', 'last_synced_at'];
+    const safeSortBy = validSortFields.includes(sortBy) ? sortBy : 'created_at';
+    query = query.order(safeSortBy, { ascending: sortOrder === 'asc' });
+
+    // Pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: items, count, error: fetchError } = await query;
 
     if (fetchError) {
       return NextResponse.json(
@@ -122,6 +199,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       items,
       count: items?.length || 0,
+      total: count || 0,
+      pagination: {
+        offset,
+        limit,
+        hasMore: (count || 0) > offset + limit,
+      },
     });
 
   } catch (error) {

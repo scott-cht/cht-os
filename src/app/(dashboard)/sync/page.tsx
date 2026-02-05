@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { notify } from '@/lib/store/app-store';
 import type { InventoryItem } from '@/types';
 
 export default function SyncStatusPage() {
@@ -45,26 +46,33 @@ export default function SyncStatusPage() {
 
       if (result.success) {
         // Remove from pending list
+        const item = pendingItems.find(i => i.id === itemId);
         setPendingItems(prev => prev.filter(item => item.id !== itemId));
+        notify.success('Sync complete', `${item?.brand} ${item?.model} synced successfully`);
       } else {
         // Move to error list
         const item = pendingItems.find(i => i.id === itemId);
         if (item) {
           setPendingItems(prev => prev.filter(i => i.id !== itemId));
           setErrorItems(prev => [...prev, { ...item, sync_status: 'error' }]);
+          notify.error('Sync failed', `${item.brand} ${item.model} failed to sync`);
         }
       }
     } catch (error) {
       console.error('Sync failed:', error);
+      notify.error('Sync failed', 'Please try again');
     } finally {
       setSyncingId(null);
     }
   };
 
   const handleSyncAll = async () => {
+    const totalItems = pendingItems.length;
+    notify.info('Syncing all', `Starting sync of ${totalItems} items...`);
     for (const item of pendingItems) {
       await handleSync(item.id);
     }
+    notify.success('Batch sync complete', `Finished syncing ${totalItems} items`);
   };
 
   return (

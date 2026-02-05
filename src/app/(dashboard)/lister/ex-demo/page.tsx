@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CameraCapture } from '@/components/lister/CameraCapture';
+import { notify } from '@/lib/store/app-store';
 import type { VisionAIResponse } from '@/types';
 
 export default function RegisterDemoPage() {
@@ -47,11 +48,15 @@ export default function RegisterDemoPage() {
         setBrand(result.brand || '');
         setModel(result.model || '');
         setSerialNumber(result.serial_number || '');
+        notify.success('Product identified', `${result.brand} ${result.model}`);
+      } else {
+        notify.warning('Identification uncertain', 'Please verify product details');
       }
 
       setStep('details');
     } catch (err) {
       setError('Failed to identify product');
+      notify.error('Identification failed', 'Please enter details manually');
       setStep('details');
     } finally {
       setIsIdentifying(false);
@@ -102,11 +107,14 @@ export default function RegisterDemoPage() {
 
       if (data.error) {
         setError(data.error);
+        notify.error('Registration failed', data.error);
       } else {
+        notify.success('Demo registered', `${brand} ${model} added to demo inventory`);
         router.push('/demo-inventory?registered=true');
       }
     } catch (err) {
       setError('Failed to register demo unit');
+      notify.error('Registration failed', 'Failed to register demo unit');
     } finally {
       setIsCreating(false);
     }

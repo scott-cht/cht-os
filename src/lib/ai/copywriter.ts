@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AIGeneratedContent, RawScrapedData, CategorizedSpecifications } from '@/types';
 import { normalizeSpecifications } from '@/lib/utils/metrics';
+import { config } from '@/config';
 
 // Lazy-load Anthropic client to avoid build-time errors
 let anthropicClient: Anthropic | null = null;
@@ -113,7 +114,7 @@ CRITICAL REQUIREMENTS:
 - Return valid JSON only, no markdown code blocks`;
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: config.ai.model,
     max_tokens: 1500,
     messages: [
       { 
@@ -173,7 +174,7 @@ export async function generateImageAltTexts(
   if (imageCount === 0) return [];
   
   const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: config.ai.model,
     max_tokens: 500,
     messages: [
       {
@@ -221,7 +222,7 @@ export async function categorizeSpecifications(
     .join(',\n');
 
   const response = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: config.ai.model,
     max_tokens: 2000,
     messages: [
       {

@@ -4,6 +4,7 @@
 
 export * from './database';
 export * from './inventory';
+export * from './filters';
 
 // Search result from discovery phase
 export interface SearchResult {

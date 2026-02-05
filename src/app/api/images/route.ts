@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import { processProductImages } from '@/lib/images/processor';
-import type { RawScrapedData, ProcessedImage } from '@/types';
+import { processProductImagesHybrid } from '@/lib/images/edge-processor';
+import type { ProcessedImage } from '@/types';
 
 /**
  * Image Processing endpoint
@@ -23,74 +23,68 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // Get the product entry
-    const { data: product, error: fetchError } = await supabase
-      .from('product_onboarding')
+    // Get the inventory item
+    const { data: item, error: fetchError } = await supabase
+      .from('inventory_items')
       .select('*')
       .eq('id', productId)
       .single();
 
-    if (fetchError || !product) {
+    if (fetchError || !item) {
       return NextResponse.json(
-        { error: 'Product not found' },
+        { error: 'Inventory item not found' },
         { status: 404 }
       );
     }
 
-    const rawData = product.raw_scraped_json as RawScrapedData | null;
+    // Get image URLs from item (could be scraped URLs or uploaded base64)
+    const imageUrls = item.image_urls || [];
+    
+    // Filter to only process URLs (not base64 data URIs which are already processed)
+    const urlsToProcess = imageUrls.filter((url: string) => 
+      url.startsWith('http://') || url.startsWith('https://')
+    );
 
-    if (!rawData?.htmlParsed?.images || rawData.htmlParsed.images.length === 0) {
+    if (urlsToProcess.length === 0) {
       return NextResponse.json(
-        { error: 'No images found to process. Please extract product data first.' },
+        { error: 'No image URLs found to process. Images may already be processed or need to be scraped first.' },
         { status: 400 }
       );
     }
 
-    // Get alt texts from AI generation if available
-    const altTexts = rawData.aiGenerated?.altTexts || [];
+    // Get alt texts from specifications if AI generated them
+    const specs = item.specifications as Record<string, unknown> || {};
+    const aiGenerated = specs._aiGenerated as { altTexts?: string[] } | undefined;
+    const altTexts = aiGenerated?.altTexts || [];
 
     // Determine category from title or use default
-    const category = detectCategory(product.title || product.model_number);
+    const category = detectCategory(item.title || item.model);
 
-    // Process and upload images
-    const { processed, failed } = await processProductImages(
-      rawData.htmlParsed.images.slice(0, 10), // Limit to 10 images
-      product.brand,
-      product.model_number,
-      category,
+    // Process images via Edge Function (or fallback to local)
+    const result = await processProductImagesHybrid({
       productId,
-      altTexts
-    );
+      imageUrls: urlsToProcess.slice(0, 10), // Limit to 10 images
+      brand: item.brand,
+      model: item.model,
+      category,
+      altTexts,
+    });
 
-    // Update the product with processed images
-    const updatedRawData: RawScrapedData = {
-      ...rawData,
-      processedImages: processed,
-    };
-
-    const { data: updatedProduct, error: updateError } = await supabase
-      .from('product_onboarding')
-      .update({
-        raw_scraped_json: updatedRawData,
-      })
+    // Fetch updated item
+    const { data: updatedItem, error: refetchError } = await supabase
+      .from('inventory_items')
+      .select('*')
       .eq('id', productId)
-      .select()
       .single();
 
-    if (updateError) {
-      throw new Error(`Failed to save processed images: ${updateError.message}`);
+    if (refetchError) {
+      console.error('Failed to fetch updated item:', refetchError);
     }
 
     return NextResponse.json({
-      success: true,
-      product: updatedProduct,
-      results: {
-        total: rawData.htmlParsed.images.length,
-        processed: processed.length,
-        failed: failed.length,
-        images: processed,
-        failedUrls: failed,
-      },
+      success: result.success,
+      item: updatedItem,
+      results: result.results,
     });
 
   } catch (error) {

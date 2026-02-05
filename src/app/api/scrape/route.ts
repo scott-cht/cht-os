@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chromium } from 'playwright';
 import { createServerClient } from '@/lib/supabase/server';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
 
 /**
  * Scrape API endpoint
@@ -11,6 +12,23 @@ import { createServerClient } from '@/lib/supabase/server';
  * Body: { url: string } OR { productId: string }
  */
 export async function POST(request: NextRequest) {
+  // Rate limit check for scraping (be polite to target sites)
+  const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+  const rateCheck = checkRateLimit(rateLimiters.scraping, clientIp);
+  
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limited. Please wait before scraping more pages.', retryAfter: rateCheck.retryAfter },
+      { 
+        status: 429,
+        headers: {
+          'Retry-After': String(rateCheck.retryAfter),
+          'X-RateLimit-Remaining': String(rateCheck.remaining),
+        },
+      }
+    );
+  }
+
   let browser = null;
   
   try {
@@ -81,12 +99,8 @@ export async function POST(request: NextRequest) {
 
     const page = await context.newPage();
 
-    // Check if URL already has #specifications anchor, if not try adding it
+    // Navigate to the URL
     let targetUrl = sourceUrl;
-    if (!targetUrl.includes('#specifications') && !targetUrl.includes('#specs')) {
-      // Try navigating directly to specifications anchor
-      targetUrl = targetUrl.includes('#') ? targetUrl : `${targetUrl}#specifications`;
-    }
     
     await page.goto(targetUrl, {
       timeout: 30000,
@@ -96,8 +110,24 @@ export async function POST(request: NextRequest) {
     // Wait for dynamic content
     await page.waitForTimeout(2000);
     
-    // If we added #specifications but page doesn't scroll there, click the tab
-    if (targetUrl.includes('#specifications')) {
+    // Detect if this is a search results page and find actual product
+    const searchPageResult = await detectAndFollowSearchResult(page, sourceUrl);
+    if (searchPageResult.followed) {
+      targetUrl = searchPageResult.productUrl || targetUrl;
+      console.log(`Followed search result to: ${targetUrl}`);
+      // Wait for new page to load
+      await page.waitForTimeout(2000);
+    }
+    
+    // Now add specifications anchor if applicable
+    if (!targetUrl.includes('#specifications') && !targetUrl.includes('#specs')) {
+      // Try scrolling to specifications section
+      await page.evaluate(() => {
+        const specsSection = document.querySelector('#specifications, #specs, [id*="specification"]');
+        if (specsSection) {
+          specsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
       await page.waitForTimeout(500);
     }
 
@@ -172,19 +202,42 @@ export async function POST(request: NextRequest) {
     // Priority 2: HTML parsing fallback
     const htmlParsed = await parseHtml(page);
 
-    // Build the raw scraped data
+    // Build the raw scraped data - use the final URL (may differ if we followed a search result)
     const rawScrapedJson = {
       jsonLd: jsonLd || undefined,
       htmlParsed,
       scrapedAt: new Date().toISOString(),
-      sourceUrl: sourceUrl,
+      sourceUrl: targetUrl, // Use final URL after any redirects/follows
+      originalSearchUrl: searchPageResult.followed ? sourceUrl : undefined,
     };
 
     // Extract key fields for convenience
-    const extractedTitle = jsonLd?.name || htmlParsed?.title || null;
+    // Handle JSON-LD brand which can be string or object like { "@type": "Brand", "name": "WiiM" }
+    const extractBrandName = (brand: unknown): string | null => {
+      if (!brand) return null;
+      if (typeof brand === 'string') return brand;
+      if (typeof brand === 'object' && brand !== null) {
+        const brandObj = brand as Record<string, unknown>;
+        if (brandObj.name && typeof brandObj.name === 'string') return brandObj.name;
+      }
+      return null;
+    };
+    
+    // Handle JSON-LD name which can also be an object in some cases
+    const extractName = (name: unknown): string | null => {
+      if (!name) return null;
+      if (typeof name === 'string') return name;
+      if (typeof name === 'object' && name !== null) {
+        const nameObj = name as Record<string, unknown>;
+        if (nameObj.name && typeof nameObj.name === 'string') return nameObj.name;
+      }
+      return null;
+    };
+    
+    const extractedTitle = extractName(jsonLd?.name) || htmlParsed?.title || null;
     const extractedPrice = parsePrice(jsonLd?.offers?.price || jsonLd?.price || htmlParsed?.price);
     const extractedDescription = htmlParsed?.description || jsonLd?.description || null;
-    const extractedBrand = jsonLd?.brand || htmlParsed?.brand || null;
+    const extractedBrand = extractBrandName(jsonLd?.brand) || htmlParsed?.brand || null;
 
     // If we have a productRecord, update it in the database
     if (productRecord?.id) {
@@ -223,6 +276,8 @@ export async function POST(request: NextRequest) {
       debug: {
         tabClicked,
         urlUsed: targetUrl,
+        followedSearchResult: searchPageResult.followed,
+        originalUrl: sourceUrl,
         ...debugInfo,
         specsExtracted: Object.keys(htmlParsed?.specifications || {}).slice(0, 20),
         specValues: Object.entries(htmlParsed?.specifications || {}).slice(0, 10).map(([k, v]) => `${k}: ${v.substring(0, 50)}`),
@@ -245,6 +300,138 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Detect if page is a search results page and follow to actual product
+ */
+async function detectAndFollowSearchResult(
+  page: import('playwright').Page, 
+  originalUrl: string
+): Promise<{ followed: boolean; productUrl?: string }> {
+  try {
+    // Check if URL looks like a search results page
+    const searchPatterns = [
+      '/search', '/catalogsearch', '/find', '?q=', '?query=', '?s=',
+      '/results', 'search?', 'search/', 'search-results'
+    ];
+    
+    const isSearchUrl = searchPatterns.some(pattern => 
+      originalUrl.toLowerCase().includes(pattern)
+    );
+    
+    if (!isSearchUrl) {
+      return { followed: false };
+    }
+    
+    console.log('Detected search results page, looking for first product...');
+    
+    // Common selectors for product links in search results
+    const productLinkSelectors = [
+      // Generic product grid/list items
+      '.product-item a[href*="/product"]',
+      '.product-item a.product-link',
+      '.product-item-link',
+      '.product-card a',
+      '.product-tile a',
+      '[class*="product-item"] a',
+      '[class*="product-card"] a',
+      '[class*="ProductCard"] a',
+      '[class*="product-tile"] a',
+      // Magento/WooCommerce common patterns
+      '.products-grid .product-item-info a',
+      '.product-item-info a.product-item-link',
+      '.woocommerce-loop-product__link',
+      // Generic search result links that go to product pages
+      '.search-results .product a',
+      '.search-result-item a',
+      '[data-testid="product-link"]',
+      '[data-testid="search-result"] a',
+      // Title/heading links (often the product name)
+      '.product-item h2 a',
+      '.product-item h3 a',
+      '.product-name a',
+      '.product-title a',
+      '[class*="product"] h2 a',
+      '[class*="product"] h3 a',
+      // Fallback: any link within product containers
+      '.products li a',
+      '.product-list a',
+      '.search-results a[href]:not([href="#"])',
+    ];
+    
+    for (const selector of productLinkSelectors) {
+      try {
+        const productLink = await page.$(selector);
+        if (productLink) {
+          const href = await productLink.getAttribute('href');
+          const isVisible = await productLink.isVisible();
+          
+          // Validate it's a real product URL (not another search, not pagination)
+          if (href && isVisible && 
+              !href.includes('/search') && 
+              !href.includes('?q=') &&
+              !href.includes('page=') &&
+              !href.includes('/cart') &&
+              href.length > 10) {
+            
+            // Make absolute URL if relative
+            let productUrl = href;
+            if (href.startsWith('/')) {
+              const baseUrl = new URL(originalUrl);
+              productUrl = `${baseUrl.origin}${href}`;
+            }
+            
+            console.log(`Found product link: ${productUrl}`);
+            
+            // Navigate to the product page
+            await page.goto(productUrl, {
+              timeout: 30000,
+              waitUntil: 'domcontentloaded',
+            });
+            
+            return { followed: true, productUrl };
+          }
+        }
+      } catch {
+        // Try next selector
+      }
+    }
+    
+    // If no product link found with selectors, try clicking first product image
+    try {
+      const firstProductImage = await page.$('.product-item img, .product-card img, [class*="product"] img');
+      if (firstProductImage) {
+        const parent = await firstProductImage.$('xpath=ancestor::a[1]');
+        if (parent) {
+          const href = await parent.getAttribute('href');
+          if (href && !href.includes('/search') && !href.includes('?q=')) {
+            let productUrl = href;
+            if (href.startsWith('/')) {
+              const baseUrl = new URL(originalUrl);
+              productUrl = `${baseUrl.origin}${href}`;
+            }
+            
+            await page.goto(productUrl, {
+              timeout: 30000,
+              waitUntil: 'domcontentloaded',
+            });
+            
+            return { followed: true, productUrl };
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    
+    console.log('Could not find product link on search page');
+    return { followed: false };
+    
+  } catch (error) {
+    console.error('Error detecting/following search result:', error);
+    return { followed: false };
   }
 }
 
