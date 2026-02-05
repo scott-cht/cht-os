@@ -111,7 +111,15 @@ export default function NewRetailListerPage() {
         extracted?: { brand?: string; model?: string; title?: string; price?: number; description?: string };
         scrapedUrl?: string;
         jsonLd?: { brand?: unknown; name?: unknown; sku?: string; description?: string; offers?: { price?: string } };
-        htmlParsed?: { brand?: string; title?: string; price?: string; description?: string; sku?: string };
+        htmlParsed?: { 
+          brand?: string; 
+          title?: string; 
+          price?: string; 
+          description?: string; 
+          sku?: string;
+          images?: string[];
+          specifications?: Record<string, string>;
+        };
       };
 
       // Helper to extract string from potentially complex JSON-LD values
@@ -134,6 +142,9 @@ export default function NewRetailListerPage() {
       const sku = rawData.jsonLd?.sku || rawData.htmlParsed?.sku || null;
       // Use the actual scraped URL (may be different from selectedUrl if we followed a search result)
       const sourceUrl = rawData.scrapedUrl || selectedUrl;
+      // Get scraped images and specifications
+      const imageUrls = rawData.htmlParsed?.images || [];
+      const specifications = rawData.htmlParsed?.specifications || {};
 
       const response = await fetch('/api/inventory', {
         method: 'POST',
@@ -147,6 +158,8 @@ export default function NewRetailListerPage() {
           sale_price: price || 0,
           source_url: sourceUrl,
           description_html: description,
+          image_urls: imageUrls,
+          specifications: specifications,
         }),
       });
 

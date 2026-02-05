@@ -11,7 +11,7 @@
 
 export const aiConfig = {
   /** Claude model for content generation */
-  model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
+  model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
   /** Maximum tokens for AI responses */
   maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096'),
   /** Temperature for AI responses (0-1) */
