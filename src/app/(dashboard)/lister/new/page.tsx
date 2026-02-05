@@ -86,6 +86,11 @@ export default function NewRetailListerPage() {
         setIsScraping(false);
       } else {
         setScrapedData(data);
+        // Update selectedUrl to the actual product page URL (if we followed a search result)
+        if (data.scrapedUrl && data.scrapedUrl !== url) {
+          setSelectedUrl(data.scrapedUrl);
+          notify.info('Followed to product', 'Found product page from search results');
+        }
         setStep('review');
         notify.success('Data scraped', 'Product data extracted successfully');
         setIsScraping(false);
@@ -103,9 +108,10 @@ export default function NewRetailListerPage() {
 
     try {
       const rawData = scrapedData as {
-        extracted?: { brand?: string; title?: string; price?: number; description?: string };
+        extracted?: { brand?: string; model?: string; title?: string; price?: number; description?: string };
+        scrapedUrl?: string;
         jsonLd?: { brand?: unknown; name?: unknown; sku?: string; description?: string; offers?: { price?: string } };
-        htmlParsed?: { brand?: string; title?: string; price?: string; description?: string };
+        htmlParsed?: { brand?: string; title?: string; price?: string; description?: string; sku?: string };
       };
 
       // Helper to extract string from potentially complex JSON-LD values
@@ -119,11 +125,15 @@ export default function NewRetailListerPage() {
         return null;
       };
 
-      // Use extracted data first (already processed), fallback to jsonLd/htmlParsed
+      // Use extracted data first (already processed by API), fallback to jsonLd/htmlParsed
       const brand = rawData.extracted?.brand || extractString(rawData.jsonLd?.brand) || rawData.htmlParsed?.brand || 'Unknown';
-      const title = rawData.extracted?.title || extractString(rawData.jsonLd?.name) || rawData.htmlParsed?.title || 'Unknown';
+      // Use model (title with brand removed) if available, otherwise use full title
+      const model = rawData.extracted?.model || rawData.extracted?.title || extractString(rawData.jsonLd?.name) || rawData.htmlParsed?.title || 'Unknown';
       const price = rawData.extracted?.price || parseFloat(rawData.jsonLd?.offers?.price || rawData.htmlParsed?.price || '0') || 0;
       const description = rawData.extracted?.description || rawData.htmlParsed?.description || rawData.jsonLd?.description || null;
+      const sku = rawData.jsonLd?.sku || rawData.htmlParsed?.sku || null;
+      // Use the actual scraped URL (may be different from selectedUrl if we followed a search result)
+      const sourceUrl = rawData.scrapedUrl || selectedUrl;
 
       const response = await fetch('/api/inventory', {
         method: 'POST',
@@ -131,11 +141,11 @@ export default function NewRetailListerPage() {
         body: JSON.stringify({
           listing_type: 'new',
           brand,
-          model: title,
-          sku: rawData.jsonLd?.sku || null,
+          model,
+          sku,
           rrp_aud: price || null,
           sale_price: price || 0,
-          source_url: selectedUrl,
+          source_url: sourceUrl,
           description_html: description,
         }),
       });
@@ -320,28 +330,28 @@ export default function NewRetailListerPage() {
 
               {(() => {
                 const data = scrapedData as {
-                  extracted?: { brand?: string; title?: string; price?: number; description?: string; hasJsonLd?: boolean; imageCount?: number; specCount?: number };
+                  extracted?: { brand?: string; model?: string; title?: string; price?: number; description?: string; hasJsonLd?: boolean; imageCount?: number; specCount?: number };
+                  scrapedUrl?: string;
+                  followedSearchResult?: boolean;
                   jsonLd?: { brand?: unknown; name?: unknown };
                   htmlParsed?: { brand?: string; title?: string };
                 };
                 
-                // Helper to extract string from potentially complex JSON-LD values
-                const extractString = (value: unknown): string | null => {
-                  if (!value) return null;
-                  if (typeof value === 'string') return value;
-                  if (typeof value === 'object' && value !== null) {
-                    const obj = value as Record<string, unknown>;
-                    if (obj.name && typeof obj.name === 'string') return obj.name;
-                  }
-                  return null;
-                };
-                
-                const brand = data.extracted?.brand || extractString(data.jsonLd?.brand) || data.htmlParsed?.brand;
-                const title = data.extracted?.title || extractString(data.jsonLd?.name) || data.htmlParsed?.title;
+                // Use the pre-extracted values from the API
+                const brand = data.extracted?.brand;
+                const model = data.extracted?.model || data.extracted?.title;
                 const price = data.extracted?.price;
 
                 return (
                   <>
+                    {data.followedSearchResult && (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <p className="text-sm text-blue-700 dark:text-blue-400">
+                          ℹ️ Automatically navigated from search results to product page
+                        </p>
+                      </div>
+                    )}
+                    
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
                         <p className="text-sm text-zinc-500 mb-1">Brand</p>
@@ -350,9 +360,9 @@ export default function NewRetailListerPage() {
                         </p>
                       </div>
                       <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
-                        <p className="text-sm text-zinc-500 mb-1">Product</p>
+                        <p className="text-sm text-zinc-500 mb-1">Model</p>
                         <p className="font-medium text-zinc-900 dark:text-white">
-                          {title || 'Not found'}
+                          {model || 'Not found'}
                         </p>
                       </div>
                     </div>

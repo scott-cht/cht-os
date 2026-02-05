@@ -237,7 +237,42 @@ export async function POST(request: NextRequest) {
     const extractedTitle = extractName(jsonLd?.name) || htmlParsed?.title || null;
     const extractedPrice = parsePrice(jsonLd?.offers?.price || jsonLd?.price || htmlParsed?.price);
     const extractedDescription = htmlParsed?.description || jsonLd?.description || null;
-    const extractedBrand = extractBrandName(jsonLd?.brand) || htmlParsed?.brand || null;
+    
+    // Try multiple sources for brand
+    let extractedBrand = extractBrandName(jsonLd?.brand) || htmlParsed?.brand || null;
+    
+    // If no brand found, try to extract from title (common pattern: "BrandName ProductModel")
+    // Known audio brands to look for
+    if (!extractedBrand && extractedTitle) {
+      const knownBrands = [
+        'WiiM', 'Marantz', 'Denon', 'Yamaha', 'Sony', 'Bose', 'Sonos', 'KEF', 
+        'Bowers', 'B&W', 'Klipsch', 'JBL', 'Harman', 'Bang', 'Olufsen', 'NAD',
+        'Cambridge', 'Rotel', 'Arcam', 'Naim', 'Focal', 'Dynaudio', 'Dali',
+        'Monitor Audio', 'Polk', 'Definitive', 'SVS', 'REL', 'Emotiva', 'Anthem',
+        'McIntosh', 'Mark Levinson', 'Audio Research', 'Pass Labs', 'Parasound',
+        'Primare', 'Hegel', 'Bluesound', 'Apple', 'Samsung', 'LG', 'Panasonic',
+        'Pioneer', 'Onkyo', 'Integra', 'Technics', 'Audio-Technica', 'Sennheiser',
+        'Shure', 'Beyerdynamic', 'AKG', 'Grado', 'Audeze', 'HiFiMan', 'Astell',
+        'FiiO', 'iFi', 'Topping', 'SMSL', 'Schiit', 'Pro-Ject', 'Rega', 'Thorens'
+      ];
+      
+      const titleLower = extractedTitle.toLowerCase();
+      for (const brand of knownBrands) {
+        if (titleLower.startsWith(brand.toLowerCase() + ' ') || 
+            titleLower.includes(' ' + brand.toLowerCase() + ' ')) {
+          extractedBrand = brand;
+          break;
+        }
+      }
+    }
+    
+    // Also try to extract model from title by removing brand
+    let extractedModel = extractedTitle;
+    if (extractedBrand && extractedTitle) {
+      // Remove brand from beginning of title to get model
+      const brandPattern = new RegExp(`^${extractedBrand}\\s+`, 'i');
+      extractedModel = extractedTitle.replace(brandPattern, '').trim() || extractedTitle;
+    }
 
     // If we have a productRecord, update it in the database
     if (productRecord?.id) {
@@ -264,8 +299,13 @@ export async function POST(request: NextRequest) {
       success: true,
       jsonLd: jsonLd || null,
       htmlParsed,
+      // Include the actual URL that was scraped (important when following search results)
+      scrapedUrl: targetUrl,
+      originalUrl: sourceUrl,
+      followedSearchResult: searchPageResult.followed,
       extracted: {
         title: extractedTitle,
+        model: extractedModel,
         brand: extractedBrand,
         price: extractedPrice,
         description: extractedDescription,
