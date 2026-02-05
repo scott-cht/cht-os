@@ -115,7 +115,8 @@ export default function NewRetailListerPage() {
           brand?: string; 
           title?: string; 
           price?: string; 
-          description?: string; 
+          description?: string;
+          descriptionHtml?: string;
           sku?: string;
           images?: string[];
           specifications?: Record<string, string>;
@@ -138,7 +139,8 @@ export default function NewRetailListerPage() {
       // Use model (title with brand removed) if available, otherwise use full title
       const model = rawData.extracted?.model || rawData.extracted?.title || extractString(rawData.jsonLd?.name) || rawData.htmlParsed?.title || 'Unknown';
       const price = rawData.extracted?.price || parseFloat(rawData.jsonLd?.offers?.price || rawData.htmlParsed?.price || '0') || 0;
-      const description = rawData.extracted?.description || rawData.htmlParsed?.description || rawData.jsonLd?.description || null;
+      // Prefer HTML description for richer content, fall back to plain text
+      const description = rawData.htmlParsed?.descriptionHtml || rawData.extracted?.description || rawData.htmlParsed?.description || rawData.jsonLd?.description || null;
       const sku = rawData.jsonLd?.sku || rawData.htmlParsed?.sku || null;
       // Use the actual scraped URL (may be different from selectedUrl if we followed a search result)
       const sourceUrl = rawData.scrapedUrl || selectedUrl;
@@ -346,14 +348,24 @@ export default function NewRetailListerPage() {
                   extracted?: { brand?: string; model?: string; title?: string; price?: number; description?: string; hasJsonLd?: boolean; imageCount?: number; specCount?: number };
                   scrapedUrl?: string;
                   followedSearchResult?: boolean;
-                  jsonLd?: { brand?: unknown; name?: unknown };
-                  htmlParsed?: { brand?: string; title?: string };
+                  jsonLd?: { brand?: unknown; name?: unknown; description?: string };
+                  htmlParsed?: { 
+                    brand?: string; 
+                    title?: string; 
+                    description?: string;
+                    specifications?: Record<string, string>;
+                    images?: string[];
+                  };
                 };
                 
                 // Use the pre-extracted values from the API
                 const brand = data.extracted?.brand;
                 const model = data.extracted?.model || data.extracted?.title;
                 const price = data.extracted?.price;
+                const description = data.extracted?.description || data.htmlParsed?.description || data.jsonLd?.description;
+                const specs = data.htmlParsed?.specifications || {};
+                const specEntries = Object.entries(specs);
+                const images = data.htmlParsed?.images || [];
 
                 return (
                   <>
@@ -390,21 +402,84 @@ export default function NewRetailListerPage() {
                       <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
                         <p className="text-sm text-zinc-500 mb-1">Images</p>
                         <p className="font-medium text-zinc-900 dark:text-white">
-                          {data.extracted?.imageCount || 0} found
+                          {images.length || data.extracted?.imageCount || 0} found
                         </p>
                       </div>
                       <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
                         <p className="text-sm text-zinc-500 mb-1">Specs</p>
                         <p className="font-medium text-zinc-900 dark:text-white">
-                          {data.extracted?.specCount || 0} items
+                          {specEntries.length || data.extracted?.specCount || 0} items
                         </p>
                       </div>
                     </div>
+
+                    {/* Description Preview */}
+                    {description && (
+                      <div className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <p className="text-sm text-zinc-500 mb-2">Description Preview</p>
+                        <p className="text-sm text-zinc-700 dark:text-zinc-300 line-clamp-3">
+                          {description.substring(0, 300)}{description.length > 300 ? '...' : ''}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Specifications Preview */}
+                    {specEntries.length > 0 && (
+                      <details className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <summary className="text-sm text-zinc-500 cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300">
+                          View {specEntries.length} Specifications
+                        </summary>
+                        <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
+                          {specEntries.slice(0, 15).map(([key, value]) => (
+                            <div key={key} className="flex justify-between text-sm py-1 border-b border-zinc-200 dark:border-zinc-700">
+                              <span className="text-zinc-600 dark:text-zinc-400">{key}</span>
+                              <span className="text-zinc-900 dark:text-white font-medium truncate ml-4 max-w-[60%]">{value}</span>
+                            </div>
+                          ))}
+                          {specEntries.length > 15 && (
+                            <p className="text-xs text-zinc-500 pt-2">
+                              +{specEntries.length - 15} more specifications
+                            </p>
+                          )}
+                        </div>
+                      </details>
+                    )}
+
+                    {/* Image Preview */}
+                    {images.length > 0 && (
+                      <details className="p-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg">
+                        <summary className="text-sm text-zinc-500 cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-300">
+                          View {images.length} Images
+                        </summary>
+                        <div className="mt-3 grid grid-cols-5 gap-2">
+                          {images.slice(0, 10).map((url, i) => (
+                            <div key={i} className="aspect-square bg-zinc-200 dark:bg-zinc-700 rounded overflow-hidden">
+                              <img 
+                                src={url} 
+                                alt={`Product image ${i + 1}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
 
                     {data.extracted?.hasJsonLd && (
                       <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
                         <p className="text-sm text-emerald-700 dark:text-emerald-400">
                           ✓ Structured data (JSON-LD) found - high accuracy extraction
+                        </p>
+                      </div>
+                    )}
+
+                    {!description && specEntries.length === 0 && (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                        <p className="text-sm text-amber-700 dark:text-amber-400">
+                          ⚠️ Limited data extracted. Try scraping a different source or the manufacturer website.
                         </p>
                       </div>
                     )}
