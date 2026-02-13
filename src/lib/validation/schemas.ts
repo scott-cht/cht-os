@@ -260,6 +260,77 @@ export const klaviyoPushSchema = z.object({
 });
 
 // ============================================
+// RMA & Service Schemas (Phase 4)
+// ============================================
+
+export const rmaStatusSchema = z.enum([
+  'received',
+  'testing',
+  'sent_to_manufacturer',
+  'repaired_replaced',
+  'back_to_customer',
+]);
+
+export const serviceEventTypeSchema = z.enum([
+  'sale_recorded',
+  'rma_received',
+  'rma_testing',
+  'rma_sent_to_manufacturer',
+  'rma_repaired_replaced',
+  'rma_back_to_customer',
+  'service_note',
+  'lamp_hours_recorded',
+]);
+
+export const rmaCaseCreateSchema = z.object({
+  shopify_order_id: z.string().min(1).max(100),
+  shopify_order_name: z.string().max(100).optional().nullable(),
+  shopify_order_number: z.coerce.number().int().nonnegative().optional().nullable(),
+  inventory_item_id: uuidSchema.optional().nullable(),
+  serial_number: z.string().max(255).optional().nullable(),
+  customer_name: z.string().max(255).optional().nullable(),
+  customer_email: z.string().email().max(255).optional().nullable(),
+  customer_phone: z.string().max(50).optional().nullable(),
+  issue_summary: z.string().min(3).max(1000),
+  issue_details: z.string().max(10000).optional().nullable(),
+  arrival_condition_report: z.string().max(5000).optional().nullable(),
+  arrival_condition_grade: conditionGradeSchema.optional().nullable(),
+  arrival_condition_images: z.array(z.string().max(500000)).max(20).optional().default([]),
+  status: rmaStatusSchema.optional().default('received'),
+});
+
+export const rmaCaseUpdateSchema = z.object({
+  issue_summary: z.string().min(3).max(1000).optional(),
+  issue_details: z.string().max(10000).optional().nullable(),
+  arrival_condition_report: z.string().max(5000).optional().nullable(),
+  arrival_condition_grade: conditionGradeSchema.optional().nullable(),
+  arrival_condition_images: z.array(z.string().max(500000)).max(20).optional(),
+  status: rmaStatusSchema.optional(),
+  hubspot_ticket_id: z.string().max(100).optional().nullable(),
+});
+
+export const rmaStatusUpdateSchema = z.object({
+  status: rmaStatusSchema,
+  note: z.string().max(1000).optional().nullable(),
+});
+
+export const rmaServiceEventCreateSchema = z.object({
+  event_type: serviceEventTypeSchema,
+  summary: z.string().max(1000).optional().nullable(),
+  notes: z.string().max(10000).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().default({}),
+});
+
+export const rmaListFiltersSchema = z.object({
+  status: rmaStatusSchema.optional(),
+  serial_number: z.string().max(255).optional(),
+  customer_email: z.string().email().max(255).optional(),
+  search: z.string().max(500).optional(),
+  limit: z.coerce.number().min(1).max(100).optional().default(25),
+  offset: z.coerce.number().min(0).optional().default(0),
+});
+
+// ============================================
 // Audit Log Schemas
 // ============================================
 

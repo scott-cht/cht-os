@@ -5,6 +5,9 @@
 export * from './database';
 export * from './inventory';
 export * from './filters';
+export * from './shopify-products';
+export * from './klaviyo';
+export * from './rma';
 
 // Search result from discovery phase
 export interface SearchResult {

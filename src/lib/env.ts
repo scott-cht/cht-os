@@ -63,6 +63,36 @@ const optionalEnvVars: EnvConfig[] = [
     description: 'HubSpot access token for deal creation',
   },
   {
+    name: 'HUBSPOT_RMA_PIPELINE_ID',
+    required: false,
+    description: 'HubSpot ticket pipeline id for RMA cases',
+  },
+  {
+    name: 'HUBSPOT_RMA_STAGE_RECEIVED',
+    required: false,
+    description: 'HubSpot RMA stage id for received status',
+  },
+  {
+    name: 'HUBSPOT_RMA_STAGE_TESTING',
+    required: false,
+    description: 'HubSpot RMA stage id for testing status',
+  },
+  {
+    name: 'HUBSPOT_RMA_STAGE_SENT_TO_MANUFACTURER',
+    required: false,
+    description: 'HubSpot RMA stage id for sent_to_manufacturer status',
+  },
+  {
+    name: 'HUBSPOT_RMA_STAGE_REPAIRED_REPLACED',
+    required: false,
+    description: 'HubSpot RMA stage id for repaired_replaced status',
+  },
+  {
+    name: 'HUBSPOT_RMA_STAGE_BACK_TO_CUSTOMER',
+    required: false,
+    description: 'HubSpot RMA stage id for back_to_customer status',
+  },
+  {
     name: 'NOTION_API_KEY',
     required: false,
     description: 'Notion API key for inventory logging',

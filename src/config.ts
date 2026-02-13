@@ -159,6 +159,18 @@ export const hubspotConfig = {
   defaultPipeline: process.env.HUBSPOT_PIPELINE_ID || 'default',
   /** Default deal stage */
   defaultStage: process.env.HUBSPOT_INTAKE_STAGE_ID || 'appointmentscheduled',
+  /** HubSpot portal/account ID (for admin URLs) */
+  portalId: process.env.HUBSPOT_PORTAL_ID || '',
+  /** RMA ticket pipeline id */
+  rmaPipelineId: process.env.HUBSPOT_RMA_PIPELINE_ID || '',
+  /** RMA ticket status mapping */
+  rmaStages: {
+    received: process.env.HUBSPOT_RMA_STAGE_RECEIVED || '',
+    testing: process.env.HUBSPOT_RMA_STAGE_TESTING || '',
+    sent_to_manufacturer: process.env.HUBSPOT_RMA_STAGE_SENT_TO_MANUFACTURER || '',
+    repaired_replaced: process.env.HUBSPOT_RMA_STAGE_REPAIRED_REPLACED || '',
+    back_to_customer: process.env.HUBSPOT_RMA_STAGE_BACK_TO_CUSTOMER || '',
+  },
 };
 
 // ============================================

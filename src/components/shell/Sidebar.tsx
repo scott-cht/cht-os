@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -70,6 +71,16 @@ const navigation: NavItem[] = [
     ),
   },
   {
+    name: 'Shopify Products',
+    href: '/shopify',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+      </svg>
+    ),
+    badge: 'New',
+  },
+  {
     name: 'Email Studio',
     href: '/klaviyo',
     icon: (
@@ -77,8 +88,16 @@ const navigation: NavItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
       </svg>
     ),
-    disabled: true,
-    phase: 'Phase 3',
+  },
+  {
+    name: 'RMA & Service',
+    href: '/rma',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2zm2-1v2m6-2v2" />
+      </svg>
+    ),
+    badge: 'Phase 4',
   },
   {
     name: 'Analytics',
@@ -93,14 +112,68 @@ const navigation: NavItem[] = [
   },
 ];
 
-const integrations = [
-  { name: 'Shopify', color: 'bg-green-500', connected: true },
-  { name: 'HubSpot', color: 'bg-orange-500', connected: false },
-  { name: 'Notion', color: 'bg-zinc-700', connected: false },
-];
+// Integration display config
+const integrationConfig: Record<string, { color: string; connectedColor: string }> = {
+  shopify: { color: 'bg-zinc-600', connectedColor: 'bg-green-500' },
+  hubspot: { color: 'bg-zinc-600', connectedColor: 'bg-orange-500' },
+  notion: { color: 'bg-zinc-600', connectedColor: 'bg-zinc-300' },
+};
+
+interface IntegrationStatus {
+  name: string;
+  connected: boolean;
+  color: string;
+}
 
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  
+  // Fetch integration status from API
+  const [integrations, setIntegrations] = useState<IntegrationStatus[]>([
+    { name: 'Shopify', connected: false, color: 'bg-zinc-600' },
+    { name: 'HubSpot', connected: false, color: 'bg-zinc-600' },
+    { name: 'Notion', connected: false, color: 'bg-zinc-600' },
+  ]);
+
+  useEffect(() => {
+    async function fetchIntegrationStatus() {
+      try {
+        const response = await fetch('/api/integrations/status');
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        
+        setIntegrations([
+          { 
+            name: 'Shopify', 
+            connected: data.shopify?.configured ?? false,
+            color: data.shopify?.configured 
+              ? integrationConfig.shopify.connectedColor 
+              : integrationConfig.shopify.color,
+          },
+          { 
+            name: 'HubSpot', 
+            connected: data.hubspot?.configured ?? false,
+            color: data.hubspot?.configured 
+              ? integrationConfig.hubspot.connectedColor 
+              : integrationConfig.hubspot.color,
+          },
+          { 
+            name: 'Notion', 
+            connected: data.notion?.configured ?? false,
+            color: data.notion?.configured 
+              ? integrationConfig.notion.connectedColor 
+              : integrationConfig.notion.color,
+          },
+        ]);
+      } catch (error) {
+        // Silently fail - keep default state
+        console.error('Failed to fetch integration status:', error);
+      }
+    }
+
+    fetchIntegrationStatus();
+  }, []);
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -240,7 +313,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
           <div className="space-y-2">
             {integrations.map((integration) => (
               <div key={integration.name} className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${integration.connected ? integration.color : 'bg-zinc-600'}`} />
+                <div className={`w-2 h-2 rounded-full ${integration.color}`} />
                 <span className={`text-sm ${integration.connected ? 'text-zinc-300' : 'text-zinc-500'}`}>
                   {integration.name}
                 </span>
@@ -260,7 +333,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
             {integrations.map((integration) => (
               <div 
                 key={integration.name}
-                className={`w-2 h-2 rounded-full ${integration.connected ? integration.color : 'bg-zinc-600'}`}
+                className={`w-2 h-2 rounded-full ${integration.color}`}
                 title={`${integration.name}: ${integration.connected ? 'Connected' : 'Not configured'}`}
               />
             ))}
