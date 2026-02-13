@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { CameraCapture } from '@/components/lister/CameraCapture';
 import { notify } from '@/lib/store/app-store';
-import type { VisionAIResponse, RRPSearchResult, ConditionGrade } from '@/types';
+import { parsePrice } from '@/lib/utils/pricing';
+import type { VisionAIResponse, RRPSearchResult, ConditionGrade, SerialCaptureStatus } from '@/types';
 
 const DEFAULT_DISCOUNT = 0.30;
 
@@ -18,6 +19,12 @@ const CONDITION_GRADES: { value: ConditionGrade; label: string; description: str
   { value: 'good', label: 'Good', description: 'Normal wear' },
   { value: 'fair', label: 'Fair', description: 'Visible wear' },
   { value: 'poor', label: 'Poor', description: 'Heavy wear' },
+];
+
+const SERIAL_CAPTURE_OPTIONS: { value: SerialCaptureStatus; label: string; description: string }[] = [
+  { value: 'captured', label: 'Captured', description: 'Serial is available and entered' },
+  { value: 'not_found', label: 'Not found', description: 'Checked but could not find it' },
+  { value: 'skipped', label: 'Skipped', description: 'Skipped capture for now' },
 ];
 
 export default function TradeInListerPage() {
@@ -35,55 +42,66 @@ export default function TradeInListerPage() {
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
+  const [serialCaptureStatus, setSerialCaptureStatus] = useState<SerialCaptureStatus>('skipped');
   const [conditionGrade, setConditionGrade] = useState<ConditionGrade | null>(null);
   const [conditionReport, setConditionReport] = useState('');
   const [rrpAud, setRrpAud] = useState<number | null>(null);
   const [rrpSource, setRrpSource] = useState<string | null>(null);
   const [salePrice, setSalePrice] = useState<number | null>(null);
+  
+  // Price validation errors
+  const [priceErrors, setPriceErrors] = useState<{ rrp: string | null; sale: string | null }>({ rrp: null, sale: null });
 
-  // Handle camera capture (first image for AI, all images for listing)
-  const handleCapture = useCallback(async (imageData: string, allImages?: string[]) => {
-    setCapturedImages(allImages || [imageData]);
-    setIsIdentifying(true);
-    setError(null);
-
-    try {
-      // Use first image for AI identification
-      const response = await fetch('/api/vision/identify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setVisionResult(result);
-        setBrand(result.brand || '');
-        setModel(result.model || '');
-        setSerialNumber(result.serial_number || '');
-        notify.success('Product identified', `${result.brand} ${result.model} (${Math.round(result.confidence * 100)}% confident)`);
-
-        // Auto-fetch RRP if we have brand and model
-        if (result.brand && result.model) {
-          fetchRRP(result.brand, result.model);
-        }
-      } else {
-        notify.warning('Identification uncertain', 'Please verify product details');
-      }
-
-      setStep('details');
-    } catch (err) {
-      setError('Failed to identify product');
-      notify.error('Identification failed', 'Please enter details manually');
-      setStep('details');
-    } finally {
-      setIsIdentifying(false);
+  // Handle price input with validation
+  const handleSalePriceChange = (value: string) => {
+    setPriceErrors(prev => ({ ...prev, sale: null }));
+    
+    if (value === '' || value === null) {
+      setSalePrice(null);
+      return;
     }
-  }, []);
+    
+    const parsed = parsePrice(value);
+    
+    if (parsed === null) {
+      setPriceErrors(prev => ({ ...prev, sale: 'Please enter a valid number' }));
+      return;
+    }
+    
+    if (parsed < 0) {
+      setPriceErrors(prev => ({ ...prev, sale: 'Price cannot be negative' }));
+      return;
+    }
+    
+    setSalePrice(parsed);
+  };
+
+  const handleRRPInputChange = (value: string) => {
+    setPriceErrors(prev => ({ ...prev, rrp: null }));
+    
+    if (value === '' || value === null) {
+      setRrpAud(null);
+      setRrpSource('manual');
+      return;
+    }
+    
+    const parsed = parsePrice(value);
+    
+    if (parsed === null) {
+      setPriceErrors(prev => ({ ...prev, rrp: 'Please enter a valid number' }));
+      return;
+    }
+    
+    if (parsed < 0) {
+      setPriceErrors(prev => ({ ...prev, rrp: 'Price cannot be negative' }));
+      return;
+    }
+    
+    handleRRPChange(parsed);
+  };
 
   // Fetch RRP
-  const fetchRRP = useCallback(async (b: string, m: string) => {
+  async function fetchRRP(b: string, m: string) {
     setIsFetchingRRP(true);
 
     try {
@@ -109,7 +127,51 @@ export default function TradeInListerPage() {
     } finally {
       setIsFetchingRRP(false);
     }
-  }, []);
+  }
+
+  // Handle camera capture (first image for AI, all images for listing)
+  const handleCapture = async (imageData: string, allImages?: string[]) => {
+    setCapturedImages(allImages || [imageData]);
+    setIsIdentifying(true);
+    setError(null);
+
+    try {
+      // Use first image for AI identification
+      const response = await fetch('/api/vision/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setVisionResult(result);
+        setBrand(result.brand || '');
+        setModel(result.model || '');
+        setSerialNumber(result.serial_number || '');
+        if (result.serial_number) {
+          setSerialCaptureStatus('captured');
+        }
+        notify.success('Product identified', `${result.brand} ${result.model} (${Math.round(result.confidence * 100)}% confident)`);
+
+        // Auto-fetch RRP if we have brand and model
+        if (result.brand && result.model) {
+          fetchRRP(result.brand, result.model);
+        }
+      } else {
+        notify.warning('Identification uncertain', 'Please verify product details');
+      }
+
+      setStep('details');
+    } catch {
+      setError('Failed to identify product');
+      notify.error('Identification failed', 'Please enter details manually');
+      setStep('details');
+    } finally {
+      setIsIdentifying(false);
+    }
+  };
 
   // Handle RRP change
   const handleRRPChange = useCallback((value: number) => {
@@ -129,6 +191,10 @@ export default function TradeInListerPage() {
       setError('Brand, model, and sale price are required');
       return;
     }
+    if (serialCaptureStatus === 'captured' && !serialNumber.trim()) {
+      setError('Enter a serial number or choose Not found / Skipped');
+      return;
+    }
 
     setIsCreating(true);
     setError(null);
@@ -141,7 +207,8 @@ export default function TradeInListerPage() {
           listing_type: 'trade_in',
           brand,
           model,
-          serial_number: serialNumber || null,
+          serial_number: serialCaptureStatus === 'captured' ? serialNumber.trim() || null : null,
+          serial_capture_status: serialCaptureStatus,
           rrp_aud: rrpAud,
           sale_price: salePrice,
           condition_grade: conditionGrade,
@@ -161,13 +228,13 @@ export default function TradeInListerPage() {
         notify.success('Trade-in created', 'Redirecting to inventory...');
         router.push(`/inventory/${data.item.id}`);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create listing');
       notify.error('Create failed', 'Failed to create trade-in listing');
     } finally {
       setIsCreating(false);
     }
-  }, [brand, model, serialNumber, rrpAud, salePrice, conditionGrade, conditionReport, capturedImages, visionResult, rrpSource, router]);
+  }, [brand, model, serialNumber, serialCaptureStatus, rrpAud, salePrice, conditionGrade, conditionReport, capturedImages, visionResult, rrpSource, router]);
 
   return (
     <Shell 
@@ -203,12 +270,14 @@ export default function TradeInListerPage() {
           {capturedImages.length > 0 && (
             <Card className="mb-6 p-0 overflow-hidden">
               {/* Main image */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={capturedImages[0]} alt="Primary" className="w-full h-48 object-cover" />
               
               {/* Thumbnail strip if multiple */}
               {capturedImages.length > 1 && (
                 <div className="p-2 bg-zinc-100 dark:bg-zinc-800 flex gap-2 overflow-x-auto">
                   {capturedImages.map((img, idx) => (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img 
                       key={idx} 
                       src={img} 
@@ -272,13 +341,42 @@ export default function TradeInListerPage() {
               {/* Serial Number */}
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
-                  Serial Number <span className="text-zinc-400 font-normal">(optional)</span>
+                  Serial Capture
                 </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                  {SERIAL_CAPTURE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setSerialCaptureStatus(option.value)}
+                      className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                        serialCaptureStatus === option.value
+                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30'
+                          : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300'
+                      }`}
+                    >
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{option.label}</p>
+                      <p className="text-xs text-zinc-500">{option.description}</p>
+                    </button>
+                  ))}
+                </div>
                 <Input
                   value={serialNumber}
-                  onChange={(e) => setSerialNumber(e.target.value)}
-                  placeholder="If available"
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setSerialNumber(next);
+                    if (next.trim()) {
+                      setSerialCaptureStatus('captured');
+                    }
+                  }}
+                  placeholder={serialCaptureStatus === 'captured' ? 'Enter serial number' : 'Optional'}
+                  disabled={serialCaptureStatus !== 'captured'}
                 />
+                {serialCaptureStatus !== 'captured' && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Serial input disabled because status is {serialCaptureStatus === 'not_found' ? 'Not found' : 'Skipped'}.
+                  </p>
+                )}
               </div>
 
               {/* Condition */}
@@ -330,13 +428,16 @@ export default function TradeInListerPage() {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span>
                       <Input
                         type="number"
-                        value={rrpAud || ''}
-                        onChange={(e) => handleRRPChange(parseFloat(e.target.value) || 0)}
+                        value={rrpAud ?? ''}
+                        onChange={(e) => handleRRPInputChange(e.target.value)}
                         placeholder="0"
-                        className="pl-7"
+                        className={`pl-7 ${priceErrors.rrp ? 'border-red-500 focus:ring-red-500' : ''}`}
                       />
                     </div>
-                    {rrpSource && rrpSource !== 'manual' && (
+                    {priceErrors.rrp && (
+                      <p className="text-xs text-red-500 mt-1">{priceErrors.rrp}</p>
+                    )}
+                    {!priceErrors.rrp && rrpSource && rrpSource !== 'manual' && (
                       <p className="text-xs text-zinc-500 mt-1">Found at {rrpSource}</p>
                     )}
                     {!rrpAud && brand && model && (
@@ -359,13 +460,16 @@ export default function TradeInListerPage() {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span>
                       <Input
                         type="number"
-                        value={salePrice || ''}
-                        onChange={(e) => setSalePrice(parseFloat(e.target.value) || 0)}
+                        value={salePrice ?? ''}
+                        onChange={(e) => handleSalePriceChange(e.target.value)}
                         placeholder="0"
-                        className="pl-7"
+                        className={`pl-7 ${priceErrors.sale ? 'border-red-500 focus:ring-red-500' : ''}`}
                       />
                     </div>
-                    {rrpAud && salePrice && (
+                    {priceErrors.sale && (
+                      <p className="text-xs text-red-500 mt-1">{priceErrors.sale}</p>
+                    )}
+                    {!priceErrors.sale && rrpAud && salePrice && (
                       <p className="text-xs text-emerald-600 mt-1">
                         {Math.round((1 - salePrice / rrpAud) * 100)}% below RRP
                       </p>
@@ -402,10 +506,12 @@ export default function TradeInListerPage() {
 
             {capturedImages.length > 0 && (
               <div className="mb-6">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={capturedImages[0]} alt="Product" className="w-full h-48 object-cover rounded-lg" />
                 {capturedImages.length > 1 && (
                   <div className="mt-2 flex gap-2 overflow-x-auto">
                     {capturedImages.slice(1).map((img, idx) => (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img 
                         key={idx} 
                         src={img} 
@@ -431,7 +537,11 @@ export default function TradeInListerPage() {
                 <span className="text-zinc-500">Model</span>
                 <span className="font-medium">{model}</span>
               </div>
-              {serialNumber && (
+              <div className="flex justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
+                <span className="text-zinc-500">Serial Status</span>
+                <span className="font-medium capitalize">{serialCaptureStatus.replace('_', ' ')}</span>
+              </div>
+              {serialCaptureStatus === 'captured' && serialNumber && (
                 <div className="flex justify-between py-2 border-b border-zinc-100 dark:border-zinc-800">
                   <span className="text-zinc-500">Serial #</span>
                   <span className="font-medium">{serialNumber}</span>

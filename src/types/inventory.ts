@@ -8,12 +8,14 @@ export type ListingType = 'new' | 'trade_in' | 'ex_demo';
 export type ConditionGrade = 'mint' | 'excellent' | 'good' | 'fair' | 'poor';
 
 export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'error';
+export type SerialCaptureStatus = 'captured' | 'not_found' | 'skipped';
 
 // Listing status (separate from sync status)
+// pending_enrichment = Imported from pricelist, needs images/description
 // on_demo = Currently on demonstration, not for sale
 // ready_to_sell = Ready to be listed for sale  
 // sold = Item has been sold
-export type ListingStatus = 'on_demo' | 'ready_to_sell' | 'sold';
+export type ListingStatus = 'pending_enrichment' | 'on_demo' | 'ready_to_sell' | 'sold';
 
 // Demo age alert levels
 export type DemoAgeAlert = 'ok' | 'warning' | 'critical';
@@ -31,6 +33,7 @@ export interface InventoryItem {
   brand: string;
   model: string;
   serial_number: string | null;
+  serial_capture_status: SerialCaptureStatus | null;
   sku: string | null;
   
   // Pricing (AUD)
@@ -90,6 +93,7 @@ export interface InventoryItemInsert {
   brand: string;
   model: string;
   serial_number?: string | null;
+  serial_capture_status?: SerialCaptureStatus | null;
   sku?: string | null;
   rrp_aud?: number | null;
   cost_price?: number | null;
@@ -117,6 +121,7 @@ export interface InventoryItemUpdate {
   brand?: string;
   model?: string;
   serial_number?: string | null;
+  serial_capture_status?: SerialCaptureStatus | null;
   sku?: string | null;
   rrp_aud?: number | null;
   cost_price?: number | null;
@@ -195,6 +200,7 @@ export interface ListerFormState {
   brand: string;
   model: string;
   serial_number: string;
+  serial_capture_status: SerialCaptureStatus;
   condition_grade: ConditionGrade | null;
   condition_report: string;
   
@@ -263,6 +269,11 @@ export const LISTING_TYPES: Record<ListingType, { label: string; description: st
 
 // Listing status display info
 export const LISTING_STATUSES: Record<ListingStatus, { label: string; description: string; color: string }> = {
+  pending_enrichment: {
+    label: 'Pending Enrichment',
+    description: 'Needs images and description from web scrape',
+    color: 'amber',
+  },
   on_demo: {
     label: 'On Demo',
     description: 'Currently on demonstration display',

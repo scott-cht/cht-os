@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
-import type { InventoryItem } from '@/types';
 
 /**
  * POST /api/inventory/[id]/duplicate
@@ -33,24 +32,17 @@ export async function POST(
       );
     }
     
-    // Prepare duplicated item data
-    // Remove fields that shouldn't be duplicated
-    const {
-      id: _id,
-      created_at: _created_at,
-      updated_at: _updated_at,
-      shopify_product_id: _shopify_id,
-      shopify_variant_id: _shopify_variant_id,
-      sync_status: _sync_status,
-      sync_error: _sync_error,
-      last_synced_at: _last_synced_at,
-      serial_number: _serial_number,
-      ...itemData
-    } = originalItem as InventoryItem & { 
-      shopify_variant_id?: string;
-      sync_error?: string;
-      last_synced_at?: string;
-    };
+    // Prepare duplicated item data by omitting fields that should not be copied.
+    const itemData = { ...(originalItem as Record<string, unknown>) };
+    delete itemData.id;
+    delete itemData.created_at;
+    delete itemData.updated_at;
+    delete itemData.shopify_product_id;
+    delete itemData.shopify_variant_id;
+    delete itemData.sync_status;
+    delete itemData.sync_error;
+    delete itemData.last_synced_at;
+    delete itemData.serial_number;
     
     // Create the duplicate with modified title
     const duplicateData = {
@@ -60,9 +52,10 @@ export async function POST(
       // Clear Shopify-specific data
       shopify_product_id: null,
       // Add "(Copy)" to model name
-      model: `${itemData.model || ''} (Copy)`.trim(),
+      model: `${originalItem.model || ''} (Copy)`.trim(),
       // Reset serial number (should be unique per item)
       serial_number: null,
+      serial_capture_status: 'skipped',
       // Apply any overrides from request
       ...overrides,
     };

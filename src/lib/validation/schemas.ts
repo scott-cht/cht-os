@@ -49,12 +49,14 @@ export const listingTypeSchema = z.enum(['new', 'trade_in', 'ex_demo']);
 export const conditionGradeSchema = z.enum(['mint', 'excellent', 'good', 'fair', 'poor']);
 export const syncStatusSchema = z.enum(['pending', 'syncing', 'synced', 'error']);
 export const listingStatusSchema = z.enum(['on_demo', 'ready_to_sell', 'sold']);
+export const serialCaptureStatusSchema = z.enum(['captured', 'not_found', 'skipped']);
 
 export const createInventoryItemSchema = z.object({
   listing_type: listingTypeSchema,
   brand: z.string().min(1, 'Brand is required').max(255),
   model: z.string().min(1, 'Model is required').max(255),
   serial_number: z.string().max(255).optional().nullable(),
+  serial_capture_status: serialCaptureStatusSchema.optional().nullable(),
   sku: z.string().max(100).optional().nullable(),
   rrp_aud: priceSchema.optional().nullable(),
   cost_price: priceSchema.optional().nullable(),
@@ -64,7 +66,7 @@ export const createInventoryItemSchema = z.object({
   title: z.string().max(255).optional().nullable(),
   description_html: z.string().max(50000).optional().nullable(),
   meta_description: z.string().max(160).optional().nullable(),
-  specifications: z.record(z.unknown()).optional().nullable(),
+  specifications: z.record(z.string(), z.unknown()).optional().nullable(),
   source_url: urlSchema.optional().nullable(),
   rrp_source: z.string().max(255).optional().nullable(),
   image_urls: z.array(z.string()).optional(),
@@ -211,6 +213,53 @@ export const visionIdentifySchema = z.object({
 });
 
 // ============================================
+// Klaviyo Schemas (Phase 2 - Email Studio)
+// ============================================
+
+export const klaviyoExportStyleSchema = z.object({
+  templateIds: z.array(z.string().min(1)).max(20).optional(),
+  campaignMessageIds: z
+    .array(
+      z.object({
+        campaignId: z.string().min(1),
+        messageId: z.string().min(1),
+      })
+    )
+    .max(20)
+    .optional(),
+  saveToDb: z.boolean().optional().default(true),
+}).refine(
+  (data) => (data.templateIds?.length ?? 0) + (data.campaignMessageIds?.length ?? 0) >= 1,
+  { message: 'At least one templateId or campaignMessageId entry is required' }
+);
+
+export const klaviyoGenerateSchema = z
+  .object({
+    inventoryIds: z.array(uuidSchema).max(50).optional(),
+    filter: z
+      .object({
+        listingTypes: z.array(listingTypeSchema).max(5).optional(),
+        limit: z.coerce.number().min(1).max(50).optional(),
+      })
+      .optional(),
+    styleGuideIds: z.array(uuidSchema).min(1, 'At least one style guide required').max(10),
+    intent: z.string().min(1, 'Intent is required').max(200),
+  })
+  .refine(
+    (data) => data.inventoryIds === undefined || data.inventoryIds.length >= 1,
+    { message: 'inventoryIds must not be empty when provided' }
+  );
+
+export const klaviyoPushSchema = z.object({
+  subject: z.string().min(1, 'Subject is required').max(255),
+  preheader: z.string().max(500).optional().nullable(),
+  htmlBody: z.string().min(1, 'HTML body is required').max(500000),
+  plainText: z.string().max(100000).optional().nullable(),
+  campaignName: z.string().max(255).optional().nullable(),
+  createCampaign: z.boolean().optional().default(false),
+});
+
+// ============================================
 // Audit Log Schemas
 // ============================================
 
@@ -236,8 +285,8 @@ export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): T {
   const result = schema.safeParse(body);
   
   if (!result.success) {
-    const errors = result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
-    throw new ValidationError(errors.join('; '), result.error.errors);
+    const errors = result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`);
+    throw new ValidationError(errors.join('; '), result.error.issues);
   }
   
   return result.data;

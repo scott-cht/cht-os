@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { createInventoryItemSchema, ValidationError, validateBody } from '@/lib/validation/schemas';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
 import type { InventoryItemInsert } from '@/types';
 
 /**
@@ -12,6 +13,16 @@ import type { InventoryItemInsert } from '@/types';
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+    const rateCheck = checkRateLimit(rateLimiters.inventory, clientIp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateCheck.retryAfter },
+        { status: 429 }
+      );
+    }
+
     const rawBody = await request.json();
 
     // Validate with Zod schema
@@ -29,6 +40,9 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+    const serialCaptureStatus =
+      body.serial_capture_status ??
+      (body.serial_number && body.serial_number.trim().length > 0 ? 'captured' : 'skipped');
 
     // Insert the inventory item
     const { data: item, error: insertError } = await supabase
@@ -39,6 +53,7 @@ export async function POST(request: NextRequest) {
         brand: body.brand,
         model: body.model,
         serial_number: body.serial_number || null,
+        serial_capture_status: serialCaptureStatus,
         sku: body.sku || null,
         rrp_aud: body.rrp_aud || null,
         cost_price: body.cost_price || null,
@@ -89,10 +104,21 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+    const rateCheck = checkRateLimit(rateLimiters.inventory, clientIp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateCheck.retryAfter },
+        { status: 429 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     
-    // Basic filters
-    const listing_type = searchParams.get('listing_type');
+    // Basic filters (support multiple listing_type for picker quick-fill)
+    const listingTypes = searchParams.getAll('listing_type').filter((t) => t && t !== 'all');
+    const listing_type = searchParams.get('listing_type'); // single for backward compat
     const listing_status = searchParams.get('listing_status');
     const sync_status = searchParams.get('sync_status');
     const condition_grade = searchParams.get('condition_grade');
@@ -111,12 +137,27 @@ export async function GET(request: NextRequest) {
     
     // Sorting
     const sortBy = searchParams.get('sort_by') || 'created_at';
-    const sortOrder = searchParams.get('sort_order') || 'desc';
+    const sortOrderParam = searchParams.get('sort_order') || 'desc';
+    const sortOrder = sortOrderParam === 'asc' ? 'asc' : 'desc';
     
     // Pagination with enforced limits (prevent DoS)
-    const requestedLimit = parseInt(searchParams.get('limit') || '50');
+    const requestedLimitRaw = Number.parseInt(searchParams.get('limit') || '50', 10);
+    if (Number.isNaN(requestedLimitRaw)) {
+      return NextResponse.json(
+        { error: 'Invalid limit parameter' },
+        { status: 400 }
+      );
+    }
+    const requestedLimit = requestedLimitRaw;
     const limit = Math.min(Math.max(requestedLimit, 1), 100); // Cap between 1-100
-    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0);
+    const offsetRaw = Number.parseInt(searchParams.get('offset') || '0', 10);
+    if (Number.isNaN(offsetRaw)) {
+      return NextResponse.json(
+        { error: 'Invalid offset parameter' },
+        { status: 400 }
+      );
+    }
+    const offset = Math.max(offsetRaw, 0);
     
     // Include archived
     const includeArchived = searchParams.get('include_archived') === 'true';
@@ -134,7 +175,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Basic filters
-    if (listing_type && listing_type !== 'all') {
+    if (listingTypes.length > 0) {
+      query = query.in('listing_type', listingTypes);
+    } else if (listing_type && listing_type !== 'all') {
       query = query.eq('listing_type', listing_type);
     }
 
@@ -162,10 +205,24 @@ export async function GET(request: NextRequest) {
 
     // Price range filters
     if (minPrice) {
-      query = query.gte('sale_price', parseInt(minPrice));
+      const parsedMin = Number.parseInt(minPrice, 10);
+      if (Number.isNaN(parsedMin)) {
+        return NextResponse.json(
+          { error: 'Invalid min_price parameter' },
+          { status: 400 }
+        );
+      }
+      query = query.gte('sale_price', parsedMin);
     }
     if (maxPrice) {
-      query = query.lte('sale_price', parseInt(maxPrice));
+      const parsedMax = Number.parseInt(maxPrice, 10);
+      if (Number.isNaN(parsedMax)) {
+        return NextResponse.json(
+          { error: 'Invalid max_price parameter' },
+          { status: 400 }
+        );
+      }
+      query = query.lte('sale_price', parsedMax);
     }
 
     // Date range filters

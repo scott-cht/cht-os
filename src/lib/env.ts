@@ -82,6 +82,26 @@ const optionalEnvVars: EnvConfig[] = [
     required: false,
     description: 'Proxy server URL for Australian scraping',
   },
+  {
+    name: 'KLAVIYO_PRIVATE_API_KEY',
+    required: false,
+    description: 'Klaviyo private API key for Email Studio (Phase 2)',
+  },
+  {
+    name: 'KLAVIYO_DEFAULT_FROM_EMAIL',
+    required: false,
+    description: 'Default sender email for Klaviyo campaign creation',
+  },
+  {
+    name: 'KLAVIYO_DEFAULT_FROM_LABEL',
+    required: false,
+    description: 'Default sender label for Klaviyo campaign creation',
+  },
+  {
+    name: 'KLAVIYO_DEFAULT_REPLY_TO_EMAIL',
+    required: false,
+    description: 'Default reply-to email for Klaviyo campaign creation',
+  },
 ];
 
 interface ValidationResult {
@@ -165,7 +185,7 @@ export function getRequiredEnv(name: string): string {
 /**
  * Check if an integration is configured
  */
-export function isIntegrationConfigured(integration: 'shopify' | 'hubspot' | 'notion' | 'anthropic' | 'serpapi'): boolean {
+export function isIntegrationConfigured(integration: 'shopify' | 'hubspot' | 'notion' | 'anthropic' | 'serpapi' | 'klaviyo'): boolean {
   switch (integration) {
     case 'shopify':
       return Boolean(process.env.SHOPIFY_STORE_DOMAIN);
@@ -177,6 +197,8 @@ export function isIntegrationConfigured(integration: 'shopify' | 'hubspot' | 'no
       return Boolean(process.env.ANTHROPIC_API_KEY);
     case 'serpapi':
       return Boolean(process.env.SERPAPI_API_KEY);
+    case 'klaviyo':
+      return Boolean(process.env.KLAVIYO_PRIVATE_API_KEY);
     default:
       return false;
   }

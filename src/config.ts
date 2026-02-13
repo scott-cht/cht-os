@@ -12,6 +12,8 @@
 export const aiConfig = {
   /** Claude model for content generation */
   model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+  /** Claude model for vision tasks */
+  visionModel: process.env.ANTHROPIC_VISION_MODEL || 'claude-sonnet-4-20250514',
   /** Maximum tokens for AI responses */
   maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096'),
   /** Temperature for AI responses (0-1) */
@@ -91,6 +93,7 @@ export const rateLimitConfig = {
     shopify: parseInt(process.env.RATE_LIMIT_SHOPIFY_RPM || '40'),
     hubspot: parseInt(process.env.RATE_LIMIT_HUBSPOT_RPM || '100'),
     notion: parseInt(process.env.RATE_LIMIT_NOTION_RPM || '30'),
+    klaviyo: parseInt(process.env.RATE_LIMIT_KLAVIYO_RPM || '30'),
   },
 };
 
@@ -124,6 +127,99 @@ export const shopifyConfig = {
   apiVersion: process.env.SHOPIFY_API_VERSION || 'January25',
   /** Default product status */
   defaultStatus: 'DRAFT' as const,
+  /** Metafield namespace */
+  metafieldNamespace: process.env.SHOPIFY_METAFIELD_NS || 'product_scout',
+};
+
+// ============================================
+// Klaviyo Configuration
+// ============================================
+
+export const klaviyoConfig = {
+  /** Private API key for Klaviyo (server-side only) */
+  apiKey: process.env.KLAVIYO_PRIVATE_API_KEY || '',
+  /** API revision for campaigns (e.g. 2024-10-15) */
+  revision: process.env.KLAVIYO_API_REVISION || '2024-10-15',
+  /** Base URL for product links in emails (e.g. https://store.example.com/products). */
+  productBaseUrl: process.env.NEXT_PUBLIC_PRODUCT_BASE_URL || '',
+  /** Default sender email used when creating campaigns */
+  defaultFromEmail: process.env.KLAVIYO_DEFAULT_FROM_EMAIL || '',
+  /** Default sender label used when creating campaigns */
+  defaultFromLabel: process.env.KLAVIYO_DEFAULT_FROM_LABEL || '',
+  /** Default reply-to email used when creating campaigns */
+  defaultReplyToEmail: process.env.KLAVIYO_DEFAULT_REPLY_TO_EMAIL || '',
+};
+
+// ============================================
+// HubSpot Configuration
+// ============================================
+
+export const hubspotConfig = {
+  /** Default pipeline ID */
+  defaultPipeline: process.env.HUBSPOT_PIPELINE_ID || 'default',
+  /** Default deal stage */
+  defaultStage: process.env.HUBSPOT_INTAKE_STAGE_ID || 'appointmentscheduled',
+};
+
+// ============================================
+// SEO Configuration (per PRD)
+// ============================================
+
+export const seoConfig = {
+  /** Maximum title length */
+  maxTitleLength: 60,
+  /** Minimum meta description length */
+  minMetaDescriptionLength: 150,
+  /** Maximum meta description length */
+  maxMetaDescriptionLength: 155,
+  /** Minimum description word count */
+  minDescriptionWords: 300,
+};
+
+// ============================================
+// Cache Configuration
+// ============================================
+
+export const cacheConfig = {
+  /** OAuth token cache TTL in ms */
+  oauthTokenMs: parseInt(process.env.OAUTH_TOKEN_CACHE_TTL || '60000'),
+  /** RRP search cache TTL in ms (1 hour) */
+  rrpSearchMs: parseInt(process.env.RRP_CACHE_TTL || '3600000'),
+};
+
+// ============================================
+// Demo Tracking Configuration
+// ============================================
+
+export const demoConfig = {
+  /** Months until warning status */
+  warningMonths: parseInt(process.env.DEMO_WARNING_MONTHS || '12'),
+  /** Months until critical status */
+  criticalMonths: parseInt(process.env.DEMO_CRITICAL_MONTHS || '24'),
+};
+
+// ============================================
+// Australian Retailers Configuration
+// ============================================
+
+export const retailersConfig = {
+  /** Priority retailers for RRP search */
+  priority: [
+    'jbhifi.com.au',
+    'harveynorman.com.au',
+    'thegoodguys.com.au',
+    'officeworks.com.au',
+    'bing-lee.com.au',
+    'appliance-online.com.au',
+  ],
+  /** Excluded domains (marketplaces) */
+  excluded: [
+    'ebay.com.au',
+    'amazon.com.au',
+    'gumtree.com.au',
+    'facebook.com',
+    'reddit.com',
+  ],
 };
 
 // ============================================
@@ -180,9 +276,22 @@ export const config = {
   rateLimit: rateLimitConfig,
   pricing: pricingConfig,
   shopify: shopifyConfig,
+  klaviyo: klaviyoConfig,
+  hubspot: hubspotConfig,
   pagination: paginationConfig,
   search: searchConfig,
+  seo: seoConfig,
+  cache: cacheConfig,
+  demo: demoConfig,
+  retailers: retailersConfig,
   features,
 };
+
+// Type exports for use in other files
+export type Config = typeof config;
+export type AIConfig = typeof aiConfig;
+export type ImageConfig = typeof imagesConfig;
+export type ScrapingConfig = typeof scrapingConfig;
+export type PricingConfig = typeof pricingConfig;
 
 export default config;

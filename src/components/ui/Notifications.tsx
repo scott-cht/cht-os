@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNotifications, useAppStore, type Notification } from '@/lib/store/app-store';
 import { cn } from '@/lib/utils/cn';
 
@@ -96,14 +96,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
 
 export function Notifications() {
   const notifications = useNotifications();
-  const [mounted, setMounted] = useState(false);
-
-  // Prevent hydration mismatch
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
+  if (typeof window === 'undefined') return null;
 
   if (notifications.length === 0) return null;
 

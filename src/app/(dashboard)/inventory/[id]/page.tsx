@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState, use, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,8 +8,10 @@ import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ConfirmDialog, useConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { notify } from '@/lib/store/app-store';
 import { PrintLabelsDialog, usePrintLabelsDialog } from '@/components/labels';
+import { parsePrice } from '@/lib/utils/pricing';
 import type { InventoryItem, ConditionGrade, SyncResult } from '@/types';
 
 const CONDITION_GRADES: { value: ConditionGrade; label: string; color: string }[] = [
@@ -41,6 +44,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const printLabelsDialog = usePrintLabelsDialog();
+  const { confirm, isOpen: confirmOpen, config: confirmConfig, handleClose: confirmClose, handleConfirm: confirmConfirm } = useConfirmDialog();
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [aiResult, setAiResult] = useState<{ title: string; metaDescription: string; titleLength: number; metaDescriptionLength: number } | null>(null);
   const [imageResult, setImageResult] = useState<{ processed: number; failed: number } | null>(null);
@@ -49,8 +53,38 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
   // Form state
   const [formData, setFormData] = useState<Partial<InventoryItem>>({});
   
+  // Price input validation state
+  const [priceErrors, setPriceErrors] = useState<Record<string, string | null>>({});
+  
   // Convert to sale state
   const [sellingImages, setSellingImages] = useState<string[]>([]);
+
+  // Handle price input changes with validation
+  const handlePriceChange = (field: 'sale_price' | 'cost_price' | 'rrp_aud', value: string) => {
+    // Clear error when user starts typing
+    setPriceErrors(prev => ({ ...prev, [field]: null }));
+    
+    // Allow empty string for clearing
+    if (value === '' || value === null) {
+      setFormData(prev => ({ ...prev, [field]: undefined }));
+      return;
+    }
+    
+    // Try to parse the price
+    const parsed = parsePrice(value);
+    
+    if (parsed === null) {
+      setPriceErrors(prev => ({ ...prev, [field]: 'Please enter a valid number' }));
+      return;
+    }
+    
+    if (parsed < 0) {
+      setPriceErrors(prev => ({ ...prev, [field]: 'Price cannot be negative' }));
+      return;
+    }
+    
+    setFormData(prev => ({ ...prev, [field]: parsed }));
+  };
 
   useEffect(() => {
     async function fetchItem() {
@@ -64,7 +98,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
           setItem(data.item);
           setFormData(data.item);
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load item');
       } finally {
         setIsLoading(false);
@@ -75,6 +109,12 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
   }, [id]);
 
   const handleSave = async () => {
+    const normalizedSerial = (formData.serial_number || '').trim();
+    if (formData.serial_capture_status === 'captured' && !normalizedSerial) {
+      notify.error('Save failed', 'Enter a serial number or change serial status to Not found / Skipped');
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
 
@@ -82,7 +122,13 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
       const response = await fetch(`/api/inventory/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          serial_number: normalizedSerial || null,
+          serial_capture_status:
+            formData.serial_capture_status ??
+            (normalizedSerial ? 'captured' : 'skipped'),
+        }),
       });
 
       const data = await response.json();
@@ -95,7 +141,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
         setFormData(data.item);
         notify.success('Changes saved', 'Item updated successfully');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to save changes');
       notify.error('Save failed', 'Failed to save changes');
     } finally {
@@ -129,7 +175,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
         }
         notify.success('Sync complete', 'Item synced to platforms');
       }
-    } catch (err) {
+    } catch {
       setError('Sync failed');
       notify.error('Sync failed', 'Please try again');
     } finally {
@@ -138,7 +184,15 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to archive this item?')) return;
+    const confirmed = await confirm({
+      title: 'Archive Item',
+      message: 'Are you sure you want to archive this item? It will be hidden from the inventory list but can be restored later.',
+      confirmText: 'Archive',
+      cancelText: 'Cancel',
+      variant: 'danger',
+    });
+
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/inventory/${id}`, {
@@ -151,7 +205,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
       } else {
         notify.error('Archive failed', 'Failed to archive item');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to delete item');
       notify.error('Archive failed', 'Failed to archive item');
     }
@@ -178,7 +232,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
         notify.success('Item duplicated', 'Opening duplicated item...');
         router.push(`/inventory/${data.item.id}`);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to duplicate item');
       notify.error('Duplicate failed', 'Failed to duplicate item');
     } finally {
@@ -220,7 +274,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
         }
         notify.success('Content generated', 'SEO title and description created');
       }
-    } catch (err) {
+    } catch {
       setError('AI generation failed');
       notify.error('Generation failed', 'Please try again');
     } finally {
@@ -260,7 +314,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
         }
         notify.success('Images processed', `${data.results.processed} images converted to WebP`);
       }
-    } catch (err) {
+    } catch {
       setError('Image processing failed');
       notify.error('Processing failed', 'Image processing failed');
     } finally {
@@ -330,7 +384,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
         // Refresh page to show updated status
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setError('Failed to convert to sale');
       notify.error('Conversion failed', 'Failed to convert to sale');
     } finally {
@@ -499,6 +553,7 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
               <div className="flex flex-wrap gap-2">
                 {sellingImages.map((img, idx) => (
                   <div key={idx} className="relative">
+                    { }
                     <img src={img} alt={`Condition ${idx + 1}`} className="w-20 h-20 object-cover rounded-lg" />
                     <button
                       onClick={() => removeSellingPhoto(idx)}
@@ -546,13 +601,16 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span>
                   <Input
                     type="number"
-                    value={formData.sale_price || ''}
-                    onChange={(e) => setFormData({ ...formData, sale_price: parseFloat(e.target.value) || 0 })}
+                    value={formData.sale_price ?? ''}
+                    onChange={(e) => handlePriceChange('sale_price', e.target.value)}
                     placeholder="Enter sale price"
-                    className="pl-7"
+                    className={`pl-7 ${priceErrors.sale_price ? 'border-red-500 focus:ring-red-500' : ''}`}
                   />
                 </div>
-                {item.cost_price && formData.sale_price && formData.sale_price > 0 && (
+                {priceErrors.sale_price && (
+                  <p className="text-xs text-red-500 mt-1">{priceErrors.sale_price}</p>
+                )}
+                {!priceErrors.sale_price && item.cost_price && formData.sale_price && formData.sale_price > 0 && (
                   <p className="text-xs text-zinc-500 mt-1">
                     Margin: ${(formData.sale_price - item.cost_price).toLocaleString()} ({Math.round(((formData.sale_price - item.cost_price) / item.cost_price) * 100)}%)
                   </p>
@@ -622,10 +680,38 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
                   <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Serial Number</label>
                   <Input
                     value={formData.serial_number || ''}
-                    onChange={(e) => setFormData({ ...formData, serial_number: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        serial_number: e.target.value,
+                        ...(e.target.value.trim() ? { serial_capture_status: 'captured' } : {}),
+                      })
+                    }
                     placeholder="Optional"
+                    disabled={formData.serial_capture_status === 'not_found' || formData.serial_capture_status === 'skipped'}
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Serial Status</label>
+                  <select
+                    value={formData.serial_capture_status || 'skipped'}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        serial_capture_status: e.target.value as InventoryItem['serial_capture_status'],
+                        ...(e.target.value !== 'captured' ? { serial_number: null } : {}),
+                      })
+                    }
+                    className="w-full h-10 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 text-sm text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="captured">Captured</option>
+                    <option value="not_found">Not found</option>
+                    <option value="skipped">Skipped</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">SKU</label>
                   <Input
@@ -715,11 +801,14 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span>
                     <Input
                       type="number"
-                      value={formData.sale_price || ''}
-                      onChange={(e) => setFormData({ ...formData, sale_price: parseFloat(e.target.value) || 0 })}
-                      className="pl-7"
+                      value={formData.sale_price ?? ''}
+                      onChange={(e) => handlePriceChange('sale_price', e.target.value)}
+                      className={`pl-7 ${priceErrors.sale_price ? 'border-red-500 focus:ring-red-500' : ''}`}
                     />
                   </div>
+                  {priceErrors.sale_price && (
+                    <p className="text-xs text-red-500 mt-1">{priceErrors.sale_price}</p>
+                  )}
                 </div>
               </div>
               {formData.rrp_aud && formData.sale_price && formData.sale_price < formData.rrp_aud && (
@@ -981,6 +1070,14 @@ export default function InventoryDetailPage({ params }: { params: Promise<{ id: 
           items={[item]}
         />
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog 
+        isOpen={confirmOpen}
+        onClose={confirmClose}
+        onConfirm={confirmConfirm}
+        {...confirmConfig}
+      />
     </Shell>
   );
 }

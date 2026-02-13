@@ -72,8 +72,12 @@ export async function POST(
     };
 
     if (result.shopify) {
-      updateData.shopify_product_id = result.shopify.product_id;
-      updateData.shopify_variant_id = result.shopify.variant_id;
+      if (result.shopify.product_id) {
+        updateData.shopify_product_id = result.shopify.product_id;
+      }
+      if (result.shopify.variant_id) {
+        updateData.shopify_variant_id = result.shopify.variant_id;
+      }
     }
 
     if (result.hubspot) {
@@ -94,16 +98,16 @@ export async function POST(
       .eq('id', id);
 
     // Log sync result
-    await logSync({
-      itemId: id,
-      success: result.success,
-      platforms: {
+    await logSync(
+      id,
+      result.success,
+      {
         shopify: result.shopify ? { success: true, productId: result.shopify.product_id } : undefined,
         hubspot: result.hubspot ? { success: true, dealId: result.hubspot.deal_id } : undefined,
         notion: result.notion ? { success: true, pageId: result.notion.page_id } : undefined,
       },
-      errors: result.errors,
-    });
+      { errors: result.errors }
+    );
 
     // Broadcast: sync complete
     await SyncBroadcaster.complete(channel, id, result.success);
@@ -119,11 +123,12 @@ export async function POST(
     const errorMessage = error instanceof Error ? error.message : 'Sync failed';
     
     // Log failed sync
-    await logSync({
-      itemId: id,
-      success: false,
-      errors: [errorMessage],
-    });
+    await logSync(
+      id,
+      false,
+      {},
+      { errors: [errorMessage] }
+    );
     
     // Broadcast error
     await SyncBroadcaster.error(channel, id, errorMessage);

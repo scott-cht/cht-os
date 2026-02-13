@@ -11,22 +11,6 @@ import type { InventoryItem, SyncResult } from '@/types';
 import { withRetry, isNetworkError } from '@/lib/utils/retry';
 import { config } from '@/config';
 
-interface ShopifyConfig {
-  storeDomain: string;
-  accessToken: string;
-}
-
-interface HubSpotConfig {
-  accessToken: string;
-  pipelineId: string;
-  stageId: string;
-}
-
-interface NotionConfig {
-  apiKey: string;
-  databaseId: string;
-}
-
 /**
  * Progress callbacks for real-time updates
  */
@@ -111,46 +95,134 @@ async function syncToShopify(item: InventoryItem): Promise<{
   variant_id: string;
   admin_url: string;
 }> {
-  const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
-  
-  // Get access token - either from env var or OAuth token in database
-  let accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
-  
-  if (!accessToken) {
-    // Try to get OAuth token from database
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-    
-    const { data } = await supabase
-      .from('oauth_tokens')
-      .select('access_token')
-      .eq('provider', 'shopify')
-      .eq('shop', storeDomain)
-      .single();
-    
-    accessToken = data?.access_token;
+  const { storeDomain, accessToken } = await getShopifyCredentials();
+  const tags = buildShopifyTags(item);
+  const metafields = buildShopifyMetafields(item);
+  const title = item.title || `${item.brand} ${item.model}`;
+  const descriptionHtml = item.description_html || buildDescription(item);
+  const productType = item.listing_type === 'new' ? 'New' : 'Pre-Owned';
+
+  // Update path: item already linked to Shopify.
+  if (item.shopify_product_id) {
+    const updateMutation = `
+      mutation productUpdate($input: ProductUpdateInput!) {
+        productUpdate(input: $input) {
+          product {
+            id
+            legacyResourceId
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                  legacyResourceId
+                }
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const updateResult = await requestShopifyGraphQL<{
+      data?: {
+        productUpdate?: {
+          product?: {
+            legacyResourceId?: string;
+            variants?: { edges?: Array<{ node?: { legacyResourceId?: string } }> };
+          };
+          userErrors?: Array<{ message: string }>;
+        };
+      };
+      errors?: Array<{ message: string }>;
+    }>(storeDomain, accessToken, updateMutation, {
+      input: {
+        id: `gid://shopify/Product/${item.shopify_product_id}`,
+        title,
+        descriptionHtml,
+        vendor: item.brand,
+        productType,
+        tags,
+        metafields,
+      },
+    });
+
+    if (updateResult.errors?.length) {
+      throw new Error(updateResult.errors.map((e) => e.message).join(', '));
+    }
+    if (updateResult.data?.productUpdate?.userErrors?.length) {
+      throw new Error(updateResult.data.productUpdate.userErrors.map((e) => e.message).join(', '));
+    }
+
+    const product = updateResult.data?.productUpdate?.product;
+    if (!product?.legacyResourceId) {
+      throw new Error('Failed to update Shopify product');
+    }
+
+    const variantId =
+      item.shopify_variant_id ||
+      product.variants?.edges?.[0]?.node?.legacyResourceId ||
+      '';
+
+    if (variantId) {
+      const variantUpdateMutation = `
+        mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants {
+              id
+              legacyResourceId
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `;
+
+      const variantUpdateResult = await requestShopifyGraphQL<{
+        data?: {
+          productVariantsBulkUpdate?: {
+            userErrors?: Array<{ message: string }>;
+          };
+        };
+        errors?: Array<{ message: string }>;
+      }>(storeDomain, accessToken, variantUpdateMutation, {
+        productId: `gid://shopify/Product/${product.legacyResourceId}`,
+        variants: [
+          {
+            id: `gid://shopify/ProductVariant/${variantId}`,
+            price: item.sale_price.toString(),
+            sku: item.sku || `${item.brand}-${item.model}`.toUpperCase().replace(/\s+/g, '-'),
+            ...(item.rrp_aud ? { compareAtPrice: item.rrp_aud.toString() } : { compareAtPrice: null }),
+          },
+        ],
+      });
+
+      if (variantUpdateResult.errors?.length) {
+        throw new Error(variantUpdateResult.errors.map((e) => e.message).join(', '));
+      }
+      if (variantUpdateResult.data?.productVariantsBulkUpdate?.userErrors?.length) {
+        throw new Error(
+          variantUpdateResult.data.productVariantsBulkUpdate.userErrors
+            .map((e) => e.message)
+            .join(', ')
+        );
+      }
+    }
+
+    return {
+      product_id: product.legacyResourceId,
+      variant_id: variantId || item.shopify_variant_id || '',
+      admin_url: `https://${storeDomain}/admin/products/${product.legacyResourceId}`,
+    };
   }
 
-  if (!storeDomain || !accessToken) {
-    throw new Error('Shopify credentials not configured. Please connect Shopify from the dashboard.');
-  }
-
-  // Build tags
-  const tags: string[] = [item.brand.toLowerCase()];
-  if (item.listing_type === 'trade_in') {
-    tags.push('pre-owned', 'trade-in');
-  } else if (item.listing_type === 'ex_demo') {
-    tags.push('pre-owned', 'ex-demo');
-  }
-  if (item.condition_grade) {
-    tags.push(`condition-${item.condition_grade}`);
-  }
-
-  // GraphQL mutation to create product
-  const mutation = `
+  // Create path: no existing linkage, always create as DRAFT.
+  const createMutation = `
     mutation productCreate($input: ProductInput!) {
       productCreate(input: $input) {
         product {
@@ -173,65 +245,167 @@ async function syncToShopify(item: InventoryItem): Promise<{
     }
   `;
 
-  const variables = {
+  const createResult = await requestShopifyGraphQL<{
+    data?: {
+      productCreate?: {
+        product?: {
+          legacyResourceId?: string;
+          variants?: { edges?: Array<{ node?: { legacyResourceId?: string } }> };
+        };
+        userErrors?: Array<{ message: string }>;
+      };
+    };
+    errors?: Array<{ message: string }>;
+  }>(storeDomain, accessToken, createMutation, {
     input: {
-      title: item.title || `${item.brand} ${item.model}`,
-      descriptionHtml: item.description_html || buildDescription(item),
+      title,
+      descriptionHtml,
       vendor: item.brand,
-      productType: item.listing_type === 'new' ? 'New' : 'Pre-Owned',
+      productType,
       status: 'DRAFT',
-      tags: tags,
-      metafields: [
+      tags,
+      metafields,
+      variants: [
         {
-          namespace: 'cht',
-          key: 'listing_type',
-          value: item.listing_type,
-          type: 'single_line_text_field',
+          price: item.sale_price.toString(),
+          sku: item.sku || `${item.brand}-${item.model}`.toUpperCase().replace(/\s+/g, '-'),
+          inventoryManagement: 'SHOPIFY',
+          inventoryPolicy: 'DENY',
+          ...(item.rrp_aud ? { compareAtPrice: item.rrp_aud.toString() } : {}),
         },
-        {
-          namespace: 'cht',
-          key: 'model_number',
-          value: item.model,
-          type: 'single_line_text_field',
-        },
-        ...(item.serial_number ? [{
-          namespace: 'cht',
-          key: 'serial_number',
-          value: item.serial_number,
-          type: 'single_line_text_field',
-        }] : []),
-        ...(item.condition_grade ? [{
-          namespace: 'cht',
-          key: 'condition_grade',
-          value: item.condition_grade,
-          type: 'single_line_text_field',
-        }] : []),
-        ...(item.condition_report ? [{
-          namespace: 'cht',
-          key: 'condition_report',
-          value: item.condition_report,
-          type: 'multi_line_text_field',
-        }] : []),
       ],
-      variants: [{
-        price: item.sale_price.toString(),
-        sku: item.sku || `${item.brand}-${item.model}`.toUpperCase().replace(/\s+/g, '-'),
-        inventoryManagement: 'SHOPIFY',
-        inventoryPolicy: 'DENY',
-        ...(item.rrp_aud ? { compareAtPrice: item.rrp_aud.toString() } : {}),
-      }],
     },
-  };
+  });
 
+  if (createResult.errors?.length) {
+    throw new Error(createResult.errors.map((e) => e.message).join(', '));
+  }
+  if (createResult.data?.productCreate?.userErrors?.length) {
+    throw new Error(createResult.data.productCreate.userErrors.map((e) => e.message).join(', '));
+  }
+
+  const product = createResult.data?.productCreate?.product;
+  if (!product?.legacyResourceId) {
+    throw new Error('Failed to create Shopify product');
+  }
+
+  return {
+    product_id: product.legacyResourceId,
+    variant_id: product.variants?.edges?.[0]?.node?.legacyResourceId || '',
+    admin_url: `https://${storeDomain}/admin/products/${product.legacyResourceId}`,
+  };
+}
+
+async function getShopifyCredentials(): Promise<{ storeDomain: string; accessToken: string }> {
+  const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
+  let accessToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+
+  if (!accessToken) {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const { data } = await supabase
+      .from('oauth_tokens')
+      .select('access_token')
+      .eq('provider', 'shopify')
+      .eq('shop', storeDomain)
+      .single();
+
+    accessToken = data?.access_token;
+  }
+
+  if (!storeDomain || !accessToken) {
+    throw new Error('Shopify credentials not configured. Please connect Shopify from the dashboard.');
+  }
+
+  return { storeDomain, accessToken };
+}
+
+function buildShopifyTags(item: InventoryItem): string[] {
+  const tags: string[] = [item.brand.toLowerCase()];
+  if (item.listing_type === 'trade_in') {
+    tags.push('pre-owned', 'trade-in');
+  } else if (item.listing_type === 'ex_demo') {
+    tags.push('pre-owned', 'ex-demo');
+  }
+  if (item.condition_grade) {
+    tags.push(`condition-${item.condition_grade}`);
+  }
+  return tags;
+}
+
+function buildShopifyMetafields(item: InventoryItem): Array<{
+  namespace: string;
+  key: string;
+  value: string;
+  type: string;
+}> {
+  const namespace = config.shopify.metafieldNamespace || 'cht';
+  return [
+    {
+      namespace,
+      key: 'listing_type',
+      value: item.listing_type,
+      type: 'single_line_text_field',
+    },
+    {
+      namespace,
+      key: 'model_number',
+      value: item.model,
+      type: 'single_line_text_field',
+    },
+    ...(item.serial_number
+      ? [
+          {
+            namespace,
+            key: 'serial_number',
+            value: item.serial_number,
+            type: 'single_line_text_field',
+          },
+        ]
+      : []),
+    ...(item.condition_grade
+      ? [
+          {
+            namespace,
+            key: 'condition_grade',
+            value: item.condition_grade,
+            type: 'single_line_text_field',
+          },
+        ]
+      : []),
+    ...(item.condition_report
+      ? [
+          {
+            namespace,
+            key: 'condition_report',
+            value: item.condition_report,
+            type: 'multi_line_text_field',
+          },
+        ]
+      : []),
+  ];
+}
+
+async function requestShopifyGraphQL<T>(
+  storeDomain: string,
+  accessToken: string,
+  query: string,
+  variables: Record<string, unknown>
+): Promise<T> {
   const response = await withRetry(
-    () => fetch(`https://${storeDomain}/admin/api/${config.shopify.apiVersion}/graphql.json`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': accessToken,
-      },
-      body: JSON.stringify({ query: mutation, variables }),
-    }),
+    () =>
+      fetch(`https://${storeDomain}/admin/api/${config.shopify.apiVersion}/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': accessToken,
+        },
+        body: JSON.stringify({ query, variables }),
+      }),
     {
       retries: 3,
       isRetryable: isNetworkError,
@@ -239,25 +413,7 @@ async function syncToShopify(item: InventoryItem): Promise<{
     }
   );
 
-  const result = await response.json();
-
-  if (result.data?.productCreate?.userErrors?.length > 0) {
-    throw new Error(result.data.productCreate.userErrors.map((e: { message: string }) => e.message).join(', '));
-  }
-
-  const product = result.data?.productCreate?.product;
-  if (!product) {
-    throw new Error('Failed to create Shopify product');
-  }
-
-  const productId = product.legacyResourceId;
-  const variantId = product.variants.edges[0]?.node?.legacyResourceId;
-
-  return {
-    product_id: productId,
-    variant_id: variantId,
-    admin_url: `https://${storeDomain}/admin/products/${productId}`,
-  };
+  return response.json() as Promise<T>;
 }
 
 /**
