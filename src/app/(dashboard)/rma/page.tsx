@@ -93,6 +93,27 @@ interface LogisticsExceptionSummary {
   sla_overdue: number;
 }
 
+interface RmaCasesResponse {
+  error?: string;
+  cases?: RmaCase[];
+}
+
+interface RmaKpisResponse {
+  error?: string;
+  kpis?: RmaKpis | null;
+}
+
+interface RmaTimeInStageResponse {
+  error?: string;
+  entries?: RmaTimeInStageEntry[];
+}
+
+interface RmaLogisticsExceptionsResponse {
+  error?: string;
+  exceptions?: LogisticsExceptionCase[];
+  summary?: LogisticsExceptionSummary | null;
+}
+
 function isSlaOverdue(rmaCase: RmaCase): boolean {
   if (!rmaCase.sla_due_at || rmaCase.status === 'back_to_customer') return false;
   return new Date(rmaCase.sla_due_at).getTime() < Date.now();
@@ -304,7 +325,7 @@ export default function RmaPage() {
     try {
       const query = buildFilterQuery();
       const response = await fetch(`/api/rma?${query.toString()}`, { signal: guard?.signal });
-      const data = await parseJsonResponse(response);
+      const data = await parseJsonResponse<RmaCasesResponse>(response);
       if (data.error) {
         throw new Error(data.error);
       }
@@ -334,7 +355,7 @@ export default function RmaPage() {
       const query = buildFilterQuery();
       query.delete('limit');
       const response = await fetch(`/api/rma/kpis?${query.toString()}`, { signal: guard?.signal });
-      const data = await parseJsonResponse(response);
+      const data = await parseJsonResponse<RmaKpisResponse>(response);
       if (!response.ok || data.error) {
         throw new Error(data.error || 'Failed to load KPI summary');
       }
@@ -352,7 +373,7 @@ export default function RmaPage() {
       const query = buildFilterQuery();
       query.delete('limit');
       const response = await fetch(`/api/rma/time-in-stage?${query.toString()}`, { signal: guard?.signal });
-      const data = await parseJsonResponse(response);
+      const data = await parseJsonResponse<RmaTimeInStageResponse>(response);
       if (!response.ok || data.error) {
         throw new Error(data.error || 'Failed to load time-in-stage metrics');
       }
@@ -374,7 +395,7 @@ export default function RmaPage() {
       const query = buildFilterQuery();
       query.delete('limit');
       const response = await fetch(`/api/rma/logistics-exceptions?${query.toString()}`, { signal: guard?.signal });
-      const data = await parseJsonResponse(response);
+      const data = await parseJsonResponse<RmaLogisticsExceptionsResponse>(response);
       if (!response.ok || data.error) {
         throw new Error(data.error || 'Failed to load logistics exceptions');
       }

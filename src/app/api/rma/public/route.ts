@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logAuditEvent } from '@/lib/audit/logger';
 import { createRmaCase, normalizeSerialNumber } from '@/lib/rma/service';
+import type { CreateRmaCaseInput } from '@/lib/rma/service';
 import { FETCH_ORDERS_QUERY, getGraphQLClient, isShopifyConfigured } from '@/lib/shopify/client';
 import { createServerClient } from '@/lib/supabase/server';
 import { checkRateLimit, rateLimiters } from '@/lib/utils/rate-limiter';
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
     const warranty = computeWarranty({ orderProcessedAt: matchedOrder.processedAt || null });
 
     const supabase = createServerClient();
-    const richPayload = {
+    const richPayload: CreateRmaCaseInput = {
       shopify_order_id: matchedOrder.id,
       shopify_order_name: matchedOrder.name,
       shopify_order_number: parseOrderNumber(matchedOrder.legacyResourceId),
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
       const missingColumn = message.includes('column') && message.includes('rma_cases');
       if (!missingColumn) throw error;
 
-      const fallbackPayload = {
+      const fallbackPayload: CreateRmaCaseInput = {
         shopify_order_id: richPayload.shopify_order_id,
         shopify_order_name: richPayload.shopify_order_name,
         shopify_order_number: richPayload.shopify_order_number,

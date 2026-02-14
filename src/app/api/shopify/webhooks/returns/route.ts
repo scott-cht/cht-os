@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { logAuditEvent } from '@/lib/audit/logger';
 import { createRmaCase } from '@/lib/rma/service';
+import type { CreateRmaCaseInput } from '@/lib/rma/service';
 import { createServerClient } from '@/lib/supabase/server';
 import { rmaWebhookReturnSchema, validateBody } from '@/lib/validation/schemas';
 import { FETCH_ORDER_BY_ID_QUERY, getGraphQLClient, isShopifyConfigured } from '@/lib/shopify/client';
@@ -21,6 +22,26 @@ type ReturnWebhookPayload = {
   phone?: string;
   note?: string;
   reason?: string;
+  return_line_items?: Array<{
+    reason?: string;
+    customer_note?: string;
+    sku?: string;
+    quantity?: number;
+    serial?: string;
+    serial_number?: string;
+    line_item?: {
+      sku?: string;
+      name?: string;
+      title?: string;
+      variant?: {
+        sku?: string;
+        barcode?: string;
+      };
+    };
+    return_reason?: {
+      name?: string;
+    };
+  }>;
   return?: {
     id?: string | number;
     order_id?: string | number;
@@ -359,7 +380,7 @@ export async function POST(request: NextRequest) {
     });
 
     const supabase = createServerClient();
-    const richPayload = {
+    const richPayload: CreateRmaCaseInput = {
       shopify_order_id: toOrderGid(payload.orderId),
       shopify_order_name: order?.name || payload.name || null,
       shopify_order_number: parseOrderNumber(order?.legacyResourceId),
@@ -404,7 +425,7 @@ export async function POST(request: NextRequest) {
       const missingColumn = message.includes('column') && message.includes('rma_cases');
       if (!missingColumn) throw error;
 
-      const fallbackPayload = {
+      const fallbackPayload: CreateRmaCaseInput = {
         shopify_order_id: richPayload.shopify_order_id,
         shopify_order_name: richPayload.shopify_order_name,
         shopify_order_number: richPayload.shopify_order_number,

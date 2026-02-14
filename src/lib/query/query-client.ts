@@ -36,7 +36,7 @@ export const queryKeys = {
   inventory: {
     all: () => [...queryKeys.all, 'inventory'] as const,
     lists: () => [...queryKeys.inventory.all(), 'list'] as const,
-    list: (filters: Record<string, unknown>) => 
+    list: (filters: object) =>
       [...queryKeys.inventory.lists(), filters] as const,
     details: () => [...queryKeys.inventory.all(), 'detail'] as const,
     detail: (id: string) => [...queryKeys.inventory.details(), id] as const,
@@ -47,7 +47,7 @@ export const queryKeys = {
   products: {
     all: () => [...queryKeys.all, 'products'] as const,
     lists: () => [...queryKeys.products.all(), 'list'] as const,
-    list: (filters: Record<string, unknown>) => 
+    list: (filters: object) =>
       [...queryKeys.products.lists(), filters] as const,
     details: () => [...queryKeys.products.all(), 'detail'] as const,
     detail: (id: string) => [...queryKeys.products.details(), id] as const,
