@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 
@@ -14,6 +14,13 @@ interface ShellProps {
 }
 
 const SIDEBAR_COLLAPSED_KEY = 'cht-sidebar-collapsed';
+const SIDEBAR_COLLAPSED_EVENT = 'cht-sidebar-collapsed-change';
+
+function getSidebarCollapsedSnapshot(): boolean {
+  if (typeof window === 'undefined') return true;
+  const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+  return stored === null ? true : stored === 'true';
+}
 
 export function Shell({ 
   children, 
@@ -23,14 +30,29 @@ export function Shell({
   fullWidth = false,
   noPadding = false,
 }: ShellProps) {
-  const [isCollapsed, setIsCollapsed] = useState(true); // Default to collapsed
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
-  // Load preference from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    if (stored !== null) {
-      setIsCollapsed(stored === 'true');
-    }
+    const handleStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === SIDEBAR_COLLAPSED_KEY) {
+        setIsCollapsed(getSidebarCollapsedSnapshot());
+      }
+    };
+    const handleCustom = () => {
+      setIsCollapsed(getSidebarCollapsedSnapshot());
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener(SIDEBAR_COLLAPSED_EVENT, handleCustom);
+    const frame = window.requestAnimationFrame(() => {
+      setIsCollapsed(getSidebarCollapsedSnapshot());
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(SIDEBAR_COLLAPSED_EVENT, handleCustom);
+    };
   }, []);
 
   // Save preference when changed
@@ -38,6 +60,7 @@ export function Shell({
     const newValue = !isCollapsed;
     setIsCollapsed(newValue);
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newValue));
+    window.dispatchEvent(new Event(SIDEBAR_COLLAPSED_EVENT));
   };
 
   return (
