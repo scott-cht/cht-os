@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
  * Update product variant with price and SKU
  */
 async function updateProductVariant(
-  client: NonNullable<ReturnType<typeof getGraphQLClient>>,
+  client: NonNullable<Awaited<ReturnType<typeof getGraphQLClient>>>,
   productId: string,
   price: string,
   sku: string
@@ -270,7 +270,7 @@ async function updateProductVariant(
  * Add images to the product
  */
 async function addProductImages(
-  client: NonNullable<ReturnType<typeof getGraphQLClient>>,
+  client: NonNullable<Awaited<ReturnType<typeof getGraphQLClient>>>,
   productId: string,
   images: NonNullable<RawScrapedData['processedImages']>
 ) {

@@ -10,7 +10,6 @@ import crypto from 'crypto';
  */
 
 const CSRF_COOKIE_NAME = 'csrf_token';
-const CSRF_HEADER_NAME = 'x-csrf-token';
 const TOKEN_LENGTH = 32;
 
 /**

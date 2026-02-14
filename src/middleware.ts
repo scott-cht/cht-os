@@ -17,6 +17,7 @@ const CSRF_EXEMPT_ROUTES = [
   '/api/csrf',           // CSRF token endpoint
   '/api/shopify/auth',   // OAuth initiation
   '/api/integrations/status',
+  '/api/shopify/webhooks',
 ];
 
 // Routes that don't require any auth
@@ -24,6 +25,8 @@ const PUBLIC_ROUTES = [
   '/api/csrf',
   '/api/integrations/status',
   '/api/shopify/auth',
+  '/api/shopify/webhooks/returns',
+  '/api/rma/public',
 ];
 
 export function middleware(request: NextRequest) {

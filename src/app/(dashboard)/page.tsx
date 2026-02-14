@@ -36,16 +36,29 @@ export default function DashboardPage() {
     notion: { configured: false, status: 'not_configured' },
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
+        setError(null);
+        
         // Fetch stats, recent items, and integration status in parallel
         const [statsRes, inventoryRes, integrationsRes] = await Promise.all([
           fetch('/api/inventory/stats'),
           fetch('/api/inventory?limit=5'),
           fetch('/api/integrations/status'),
         ]);
+        
+        // Check for failed responses
+        const failedRequests: string[] = [];
+        if (!statsRes.ok) failedRequests.push('stats');
+        if (!inventoryRes.ok) failedRequests.push('inventory');
+        if (!integrationsRes.ok) failedRequests.push('integrations');
+        
+        if (failedRequests.length === 3) {
+          throw new Error('Unable to connect to the server. Please check your connection and try again.');
+        }
         
         const statsData = await statsRes.json();
         const inventoryData = await inventoryRes.json();
@@ -60,6 +73,8 @@ export default function DashboardPage() {
             pendingSync: statsData.pendingSync,
             syncedToday: statsData.syncedToday,
           });
+        } else if (statsData.error) {
+          console.warn('Stats API error:', statsData.error);
         }
         
         // Set recent items for display
@@ -67,11 +82,17 @@ export default function DashboardPage() {
           setRecentItems(inventoryData.items);
         }
         
-        if (integrationsData) {
+        if (integrationsData && !integrationsData.error) {
           setIntegrations(integrationsData);
+        }
+        
+        // Show partial error if some requests failed
+        if (failedRequests.length > 0) {
+          setError(`Some data could not be loaded (${failedRequests.join(', ')}). The dashboard may show incomplete information.`);
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load dashboard data. Please try refreshing the page.');
       } finally {
         setIsLoading(false);
       }
@@ -82,6 +103,33 @@ export default function DashboardPage() {
 
   return (
     <Shell title="Dashboard" subtitle="Welcome to CHT Command Centre">
+      {/* Error State */}
+      {error && (
+        <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{error}</p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="mt-2 text-sm text-amber-700 dark:text-amber-400 hover:underline"
+            >
+              Refresh Page
+            </button>
+          </div>
+          <button 
+            onClick={() => setError(null)}
+            className="text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
+            aria-label="Dismiss error"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <Link

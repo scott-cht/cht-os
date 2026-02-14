@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useRef, useCallback, DragEvent } from 'react';
 import { cn } from '@/lib/utils/cn';
@@ -252,6 +253,7 @@ export function ImageGallery({
 
               {/* Image */}
               <div className="aspect-square bg-zinc-100 dark:bg-zinc-800">
+                { }
                 <img
                   src={image.url}
                   alt={image.altText}

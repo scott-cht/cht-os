@@ -271,6 +271,14 @@ export const rmaStatusSchema = z.enum([
   'back_to_customer',
 ]);
 
+export const rmaSourceSchema = z.enum(['manual', 'shopify_return_webhook', 'customer_form']);
+export const rmaSubmissionChannelSchema = z.enum(['internal_dashboard', 'shopify_webhook', 'customer_portal']);
+export const rmaWarrantyStatusSchema = z.enum(['in_warranty', 'out_of_warranty', 'unknown']);
+export const rmaWarrantyBasisSchema = z.enum(['manufacturer', 'extended', 'acl', 'manual_override', 'unknown']);
+export const rmaDispositionSchema = z.enum(['repair', 'replace', 'refund', 'reject', 'monitor']);
+export const rmaPrioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
+export const rmaContactPreferenceSchema = z.enum(['email', 'phone', 'sms', 'unknown']);
+
 export const serviceEventTypeSchema = z.enum([
   'sale_recorded',
   'rma_received',
@@ -291,12 +299,57 @@ export const rmaCaseCreateSchema = z.object({
   customer_name: z.string().max(255).optional().nullable(),
   customer_email: z.string().email().max(255).optional().nullable(),
   customer_phone: z.string().max(50).optional().nullable(),
+  customer_first_name: z.string().max(255).optional().nullable(),
+  customer_last_name: z.string().max(255).optional().nullable(),
+  customer_company: z.string().max(255).optional().nullable(),
+  customer_contact_preference: rmaContactPreferenceSchema.optional().default('unknown'),
+  customer_address_json: z.record(z.string(), z.unknown()).optional().nullable(),
+  shopify_customer_id: z.string().max(100).optional().nullable(),
+  order_processed_at: z.string().datetime().optional().nullable(),
+  order_financial_status: z.string().max(80).optional().nullable(),
+  order_fulfillment_status: z.string().max(80).optional().nullable(),
+  order_currency: z.string().max(8).optional().nullable(),
+  order_total_amount: z.coerce.number().nonnegative().optional().nullable(),
+  order_line_items_json: z.record(z.string(), z.unknown()).optional().nullable(),
   issue_summary: z.string().min(3).max(1000),
   issue_details: z.string().max(10000).optional().nullable(),
   arrival_condition_report: z.string().max(5000).optional().nullable(),
   arrival_condition_grade: conditionGradeSchema.optional().nullable(),
   arrival_condition_images: z.array(z.string().max(500000)).max(20).optional().default([]),
   status: rmaStatusSchema.optional().default('received'),
+  source: rmaSourceSchema.optional().default('manual'),
+  submission_channel: rmaSubmissionChannelSchema.optional().default('internal_dashboard'),
+  shopify_return_id: z.string().max(100).optional().nullable(),
+  external_reference: z.string().max(150).optional().nullable(),
+  dedupe_key: z.string().max(255).optional().nullable(),
+  warranty_status: rmaWarrantyStatusSchema.optional().default('unknown'),
+  warranty_basis: rmaWarrantyBasisSchema.optional().default('unknown'),
+  warranty_expires_at: z.string().datetime().optional().nullable(),
+  warranty_decision_notes: z.string().max(10000).optional().nullable(),
+  warranty_checked_at: z.string().datetime().optional().nullable(),
+  inbound_carrier: z.string().max(120).optional().nullable(),
+  inbound_tracking_number: z.string().max(200).optional().nullable(),
+  inbound_tracking_url: z.string().url().max(2000).optional().nullable(),
+  inbound_status: z.string().max(80).optional().nullable(),
+  outbound_carrier: z.string().max(120).optional().nullable(),
+  outbound_tracking_number: z.string().max(200).optional().nullable(),
+  outbound_tracking_url: z.string().url().max(2000).optional().nullable(),
+  outbound_status: z.string().max(80).optional().nullable(),
+  received_at: z.string().datetime().optional().nullable(),
+  inspected_at: z.string().datetime().optional().nullable(),
+  shipped_back_at: z.string().datetime().optional().nullable(),
+  delivered_back_at: z.string().datetime().optional().nullable(),
+  return_label_url: z.string().url().max(2000).optional().nullable(),
+  proof_of_delivery_url: z.string().url().max(2000).optional().nullable(),
+  disposition: rmaDispositionSchema.optional().nullable(),
+  disposition_reason: z.string().max(5000).optional().nullable(),
+  priority: rmaPrioritySchema.optional().default('normal'),
+  sla_due_at: z.string().datetime().optional().nullable(),
+  assigned_owner_name: z.string().max(255).optional().nullable(),
+  assigned_owner_email: z.string().email().max(255).optional().nullable(),
+  assigned_technician_name: z.string().max(255).optional().nullable(),
+  assigned_technician_email: z.string().email().max(255).optional().nullable(),
+  assigned_at: z.string().datetime().optional().nullable(),
 });
 
 export const rmaCaseUpdateSchema = z.object({
@@ -306,6 +359,51 @@ export const rmaCaseUpdateSchema = z.object({
   arrival_condition_grade: conditionGradeSchema.optional().nullable(),
   arrival_condition_images: z.array(z.string().max(500000)).max(20).optional(),
   status: rmaStatusSchema.optional(),
+  source: rmaSourceSchema.optional(),
+  submission_channel: rmaSubmissionChannelSchema.optional(),
+  shopify_return_id: z.string().max(100).optional().nullable(),
+  external_reference: z.string().max(150).optional().nullable(),
+  dedupe_key: z.string().max(255).optional().nullable(),
+  customer_first_name: z.string().max(255).optional().nullable(),
+  customer_last_name: z.string().max(255).optional().nullable(),
+  customer_company: z.string().max(255).optional().nullable(),
+  customer_contact_preference: rmaContactPreferenceSchema.optional(),
+  customer_address_json: z.record(z.string(), z.unknown()).optional().nullable(),
+  shopify_customer_id: z.string().max(100).optional().nullable(),
+  order_processed_at: z.string().datetime().optional().nullable(),
+  order_financial_status: z.string().max(80).optional().nullable(),
+  order_fulfillment_status: z.string().max(80).optional().nullable(),
+  order_currency: z.string().max(8).optional().nullable(),
+  order_total_amount: z.coerce.number().nonnegative().optional().nullable(),
+  order_line_items_json: z.record(z.string(), z.unknown()).optional().nullable(),
+  warranty_status: rmaWarrantyStatusSchema.optional(),
+  warranty_basis: rmaWarrantyBasisSchema.optional(),
+  warranty_expires_at: z.string().datetime().optional().nullable(),
+  warranty_decision_notes: z.string().max(10000).optional().nullable(),
+  warranty_checked_at: z.string().datetime().optional().nullable(),
+  inbound_carrier: z.string().max(120).optional().nullable(),
+  inbound_tracking_number: z.string().max(200).optional().nullable(),
+  inbound_tracking_url: z.string().url().max(2000).optional().nullable(),
+  inbound_status: z.string().max(80).optional().nullable(),
+  outbound_carrier: z.string().max(120).optional().nullable(),
+  outbound_tracking_number: z.string().max(200).optional().nullable(),
+  outbound_tracking_url: z.string().url().max(2000).optional().nullable(),
+  outbound_status: z.string().max(80).optional().nullable(),
+  received_at: z.string().datetime().optional().nullable(),
+  inspected_at: z.string().datetime().optional().nullable(),
+  shipped_back_at: z.string().datetime().optional().nullable(),
+  delivered_back_at: z.string().datetime().optional().nullable(),
+  return_label_url: z.string().url().max(2000).optional().nullable(),
+  proof_of_delivery_url: z.string().url().max(2000).optional().nullable(),
+  disposition: rmaDispositionSchema.optional().nullable(),
+  disposition_reason: z.string().max(5000).optional().nullable(),
+  priority: rmaPrioritySchema.optional(),
+  sla_due_at: z.string().datetime().optional().nullable(),
+  assigned_owner_name: z.string().max(255).optional().nullable(),
+  assigned_owner_email: z.string().email().max(255).optional().nullable(),
+  assigned_technician_name: z.string().max(255).optional().nullable(),
+  assigned_technician_email: z.string().email().max(255).optional().nullable(),
+  assigned_at: z.string().datetime().optional().nullable(),
   hubspot_ticket_id: z.string().max(100).optional().nullable(),
 });
 
@@ -313,6 +411,42 @@ export const rmaStatusUpdateSchema = z.object({
   status: rmaStatusSchema,
   note: z.string().max(1000).optional().nullable(),
 });
+
+export const rmaTrackingUpdateSchema = z.object({
+  direction: z.enum(['inbound', 'outbound']),
+  carrier: z.string().max(120).optional().nullable(),
+  tracking_number: z.string().max(200).optional().nullable(),
+  tracking_url: z.string().url().max(2000).optional().nullable(),
+  status: z.string().max(80).optional().nullable(),
+  delivered_at: z.string().datetime().optional().nullable(),
+  event_note: z.string().max(1000).optional().nullable(),
+});
+
+export const rmaWarrantyDecisionSchema = z.object({
+  warranty_status: rmaWarrantyStatusSchema,
+  warranty_basis: rmaWarrantyBasisSchema,
+  decision_notes: z.string().min(5).max(10000),
+  priority: rmaPrioritySchema.optional(),
+});
+
+export const rmaCommunicationCreateSchema = z
+  .object({
+    template_key: z.enum(['received_ack', 'testing_update', 'oow_quote', 'shipped_back']).optional(),
+    recipient: z.string().email().max(255).optional(),
+    subject: z.string().max(255).optional(),
+    body: z.string().min(3).max(20000).optional(),
+    send_mode: z.enum(['log_only', 'manual_mailto']).optional().default('manual_mailto'),
+    metadata: z.record(z.string(), z.unknown()).optional().default({}),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.template_key && (!data.subject || !data.body)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either template_key or both subject and body are required.',
+        path: ['template_key'],
+      });
+    }
+  });
 
 export const rmaServiceEventCreateSchema = z.object({
   event_type: serviceEventTypeSchema,
@@ -325,9 +459,32 @@ export const rmaListFiltersSchema = z.object({
   status: rmaStatusSchema.optional(),
   serial_number: z.string().max(255).optional(),
   customer_email: z.string().email().max(255).optional(),
+  source: rmaSourceSchema.optional(),
+  warranty_status: rmaWarrantyStatusSchema.optional(),
+  priority: rmaPrioritySchema.optional(),
+  technician_email: z.string().email().max(255).optional(),
+  my_queue_email: z.string().email().max(255).optional(),
   search: z.string().max(500).optional(),
   limit: z.coerce.number().min(1).max(100).optional().default(25),
   offset: z.coerce.number().min(0).optional().default(0),
+});
+
+export const rmaPublicCreateSchema = z.object({
+  order_number: z.string().min(1).max(100),
+  order_email: z.string().email().max(255),
+  serial_number: z.string().max(255).optional().nullable(),
+  issue_summary: z.string().min(3).max(1000),
+  issue_details: z.string().max(10000).optional().nullable(),
+  arrival_condition_report: z.string().max(5000).optional().nullable(),
+  arrival_condition_images: z.array(z.string().max(500000)).max(20).optional().default([]),
+  honeypot: z.string().max(200).optional().default(''),
+});
+
+export const rmaWebhookReturnSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+  order_id: z.union([z.string(), z.number()]),
+  name: z.string().optional(),
+  status: z.string().optional(),
 });
 
 // ============================================

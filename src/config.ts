@@ -1,309 +1,76 @@
-/**
- * Application Configuration
- * 
- * Centralized configuration for all application settings.
- * Values can be overridden via environment variables.
- */
+import type { RmaStatus } from '@/types';
 
-// ============================================
-// AI Configuration
-// ============================================
+function getString(value: string | undefined, fallback = ''): string {
+  return (value ?? fallback).trim();
+}
 
-export const aiConfig = {
-  /** Claude model for content generation */
-  model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
-  /** Claude model for vision tasks */
-  visionModel: process.env.ANTHROPIC_VISION_MODEL || 'claude-sonnet-4-20250514',
-  /** Maximum tokens for AI responses */
-  maxTokens: parseInt(process.env.AI_MAX_TOKENS || '4096'),
-  /** Temperature for AI responses (0-1) */
-  temperature: parseFloat(process.env.AI_TEMPERATURE || '0.7'),
-  /** Timeout for AI requests in ms */
-  timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '30000'),
+function getNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getBoolean(value: string | undefined, fallback = false): boolean {
+  if (value == null) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+type RmaStageMap = Record<RmaStatus, string>;
+
+const rmaStages: RmaStageMap = {
+  received: getString(process.env.HUBSPOT_RMA_STAGE_RECEIVED),
+  testing: getString(process.env.HUBSPOT_RMA_STAGE_TESTING),
+  sent_to_manufacturer: getString(process.env.HUBSPOT_RMA_STAGE_SENT_TO_MANUFACTURER),
+  repaired_replaced: getString(process.env.HUBSPOT_RMA_STAGE_REPAIRED_REPLACED),
+  back_to_customer: getString(process.env.HUBSPOT_RMA_STAGE_BACK_TO_CUSTOMER),
 };
-
-// ============================================
-// Scraping Configuration
-// ============================================
-
-export const scrapingConfig = {
-  /** Request timeout in ms */
-  timeoutMs: parseInt(process.env.SCRAPE_TIMEOUT_MS || '30000'),
-  /** User agent for requests */
-  userAgent: process.env.SCRAPE_USER_AGENT || 
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  
-  // Proxy Configuration (Per PRD: "Use AU residential proxies")
-  proxy: {
-    /** Enable proxy for scraping */
-    enabled: process.env.PROXY_ENABLED === 'true',
-    /** Proxy server URL (e.g., http://user:pass@proxy.example.com:8080) */
-    url: process.env.PROXY_URL || '',
-    /** Proxy type */
-    type: (process.env.PROXY_TYPE || 'http') as 'http' | 'socks5',
-    /** Rotate proxies (if using a proxy pool service) */
-    rotate: process.env.PROXY_ROTATE === 'true',
-    /** Australian proxy preference */
-    preferAU: process.env.PROXY_PREFER_AU !== 'false', // default true
-  },
-  
-  /** Retry configuration */
-  retry: {
-    maxAttempts: parseInt(process.env.SCRAPE_RETRY_MAX || '3'),
-    delayMs: parseInt(process.env.SCRAPE_RETRY_DELAY_MS || '1000'),
-    backoffMultiplier: parseFloat(process.env.SCRAPE_RETRY_BACKOFF || '2'),
-  },
-  
-  /** Domains to prioritize (Australian retailers) */
-  priorityDomains: [
-    '.com.au',
-    '.au',
-  ],
-};
-
-// ============================================
-// Image Processing Configuration
-// ============================================
-
-export const imagesConfig = {
-  /** Supabase Storage bucket name */
-  bucket: process.env.STORAGE_BUCKET || 'product-images',
-  /** WebP quality (0-100) */
-  quality: parseInt(process.env.IMAGE_QUALITY || '85'),
-  /** Maximum image width */
-  maxWidth: parseInt(process.env.IMAGE_MAX_WIDTH || '1200'),
-  /** Maximum image height */
-  maxHeight: parseInt(process.env.IMAGE_MAX_HEIGHT || '1200'),
-  /** Maximum images per product */
-  maxImagesPerProduct: parseInt(process.env.MAX_IMAGES_PER_PRODUCT || '10'),
-};
-
-// ============================================
-// API Rate Limiting Configuration
-// ============================================
-
-export const rateLimitConfig = {
-  /** Default rate limit (requests per minute) */
-  defaultRpm: parseInt(process.env.RATE_LIMIT_RPM || '60'),
-  
-  /** Per-service rate limits */
-  services: {
-    anthropic: parseInt(process.env.RATE_LIMIT_ANTHROPIC_RPM || '50'),
-    serpapi: parseInt(process.env.RATE_LIMIT_SERPAPI_RPM || '100'),
-    shopify: parseInt(process.env.RATE_LIMIT_SHOPIFY_RPM || '40'),
-    hubspot: parseInt(process.env.RATE_LIMIT_HUBSPOT_RPM || '100'),
-    notion: parseInt(process.env.RATE_LIMIT_NOTION_RPM || '30'),
-    klaviyo: parseInt(process.env.RATE_LIMIT_KLAVIYO_RPM || '30'),
-  },
-};
-
-// ============================================
-// Pricing Configuration (Australian Standards)
-// ============================================
-
-export const pricingConfig = {
-  /** GST rate (10% in Australia) */
-  gstRate: 0.10,
-  /** Default discount percentage for ex-demo */
-  defaultExDemoDiscount: parseInt(process.env.DEFAULT_EX_DEMO_DISCOUNT || '20'),
-  /** Default discount percentage for trade-in */
-  defaultTradeInDiscount: parseInt(process.env.DEFAULT_TRADE_IN_DISCOUNT || '30'),
-  /** Minimum margin percentage (safety threshold) */
-  minimumMarginPercent: parseInt(process.env.MIN_MARGIN_PERCENT || '20'),
-  /** Currency */
-  currency: 'AUD',
-  /** Locale for formatting */
-  locale: 'en-AU',
-};
-
-// ============================================
-// Shopify Configuration
-// ============================================
-
-export const shopifyConfig = {
-  /** Token cache duration in ms */
-  tokenCacheMs: parseInt(process.env.SHOPIFY_TOKEN_CACHE_MS || '60000'),
-  /** API version */
-  apiVersion: process.env.SHOPIFY_API_VERSION || 'January25',
-  /** Default product status */
-  defaultStatus: 'DRAFT' as const,
-  /** Metafield namespace */
-  metafieldNamespace: process.env.SHOPIFY_METAFIELD_NS || 'product_scout',
-};
-
-// ============================================
-// Klaviyo Configuration
-// ============================================
-
-export const klaviyoConfig = {
-  /** Private API key for Klaviyo (server-side only) */
-  apiKey: process.env.KLAVIYO_PRIVATE_API_KEY || '',
-  /** API revision for campaigns (e.g. 2024-10-15) */
-  revision: process.env.KLAVIYO_API_REVISION || '2024-10-15',
-  /** Base URL for product links in emails (e.g. https://store.example.com/products). */
-  productBaseUrl: process.env.NEXT_PUBLIC_PRODUCT_BASE_URL || '',
-  /** Default sender email used when creating campaigns */
-  defaultFromEmail: process.env.KLAVIYO_DEFAULT_FROM_EMAIL || '',
-  /** Default sender label used when creating campaigns */
-  defaultFromLabel: process.env.KLAVIYO_DEFAULT_FROM_LABEL || '',
-  /** Default reply-to email used when creating campaigns */
-  defaultReplyToEmail: process.env.KLAVIYO_DEFAULT_REPLY_TO_EMAIL || '',
-};
-
-// ============================================
-// HubSpot Configuration
-// ============================================
-
-export const hubspotConfig = {
-  /** Default pipeline ID */
-  defaultPipeline: process.env.HUBSPOT_PIPELINE_ID || 'default',
-  /** Default deal stage */
-  defaultStage: process.env.HUBSPOT_INTAKE_STAGE_ID || 'appointmentscheduled',
-  /** HubSpot portal/account ID (for admin URLs) */
-  portalId: process.env.HUBSPOT_PORTAL_ID || '',
-  /** RMA ticket pipeline id */
-  rmaPipelineId: process.env.HUBSPOT_RMA_PIPELINE_ID || '',
-  /** RMA ticket status mapping */
-  rmaStages: {
-    received: process.env.HUBSPOT_RMA_STAGE_RECEIVED || '',
-    testing: process.env.HUBSPOT_RMA_STAGE_TESTING || '',
-    sent_to_manufacturer: process.env.HUBSPOT_RMA_STAGE_SENT_TO_MANUFACTURER || '',
-    repaired_replaced: process.env.HUBSPOT_RMA_STAGE_REPAIRED_REPLACED || '',
-    back_to_customer: process.env.HUBSPOT_RMA_STAGE_BACK_TO_CUSTOMER || '',
-  },
-};
-
-// ============================================
-// SEO Configuration (per PRD)
-// ============================================
-
-export const seoConfig = {
-  /** Maximum title length */
-  maxTitleLength: 60,
-  /** Minimum meta description length */
-  minMetaDescriptionLength: 150,
-  /** Maximum meta description length */
-  maxMetaDescriptionLength: 155,
-  /** Minimum description word count */
-  minDescriptionWords: 300,
-};
-
-// ============================================
-// Cache Configuration
-// ============================================
-
-export const cacheConfig = {
-  /** OAuth token cache TTL in ms */
-  oauthTokenMs: parseInt(process.env.OAUTH_TOKEN_CACHE_TTL || '60000'),
-  /** RRP search cache TTL in ms (1 hour) */
-  rrpSearchMs: parseInt(process.env.RRP_CACHE_TTL || '3600000'),
-};
-
-// ============================================
-// Demo Tracking Configuration
-// ============================================
-
-export const demoConfig = {
-  /** Months until warning status */
-  warningMonths: parseInt(process.env.DEMO_WARNING_MONTHS || '12'),
-  /** Months until critical status */
-  criticalMonths: parseInt(process.env.DEMO_CRITICAL_MONTHS || '24'),
-};
-
-// ============================================
-// Australian Retailers Configuration
-// ============================================
-
-export const retailersConfig = {
-  /** Priority retailers for RRP search */
-  priority: [
-    'jbhifi.com.au',
-    'harveynorman.com.au',
-    'thegoodguys.com.au',
-    'officeworks.com.au',
-    'bing-lee.com.au',
-    'appliance-online.com.au',
-  ],
-  /** Excluded domains (marketplaces) */
-  excluded: [
-    'ebay.com.au',
-    'amazon.com.au',
-    'gumtree.com.au',
-    'facebook.com',
-    'reddit.com',
-  ],
-};
-
-// ============================================
-// Pagination Configuration
-// ============================================
-
-export const paginationConfig = {
-  /** Default page size */
-  defaultLimit: parseInt(process.env.PAGINATION_DEFAULT_LIMIT || '50'),
-  /** Maximum page size */
-  maxLimit: parseInt(process.env.PAGINATION_MAX_LIMIT || '100'),
-};
-
-// ============================================
-// Search Configuration
-// ============================================
-
-export const searchConfig = {
-  /** SerpAPI parameters for Australian results */
-  serpapi: {
-    gl: 'au', // Country
-    hl: 'en', // Language
-    google_domain: 'google.com.au',
-  },
-  /** Site filter for Australian domains */
-  siteFilter: 'site:.com.au',
-  /** Maximum search results */
-  maxResults: parseInt(process.env.SEARCH_MAX_RESULTS || '10'),
-};
-
-// ============================================
-// Feature Flags
-// ============================================
-
-export const features = {
-  /** Enable CSRF protection */
-  csrfProtection: process.env.CSRF_PROTECTION === 'true',
-  /** Enable audit logging */
-  auditLogging: process.env.AUDIT_LOGGING !== 'false', // default true
-  /** Enable realtime updates */
-  realtimeUpdates: process.env.REALTIME_UPDATES !== 'false', // default true
-  /** Enable proxy for scraping */
-  proxyEnabled: process.env.PROXY_ENABLED === 'true',
-};
-
-// ============================================
-// Export Combined Config
-// ============================================
 
 export const config = {
-  ai: aiConfig,
-  scraping: scrapingConfig,
-  images: imagesConfig,
-  rateLimit: rateLimitConfig,
-  pricing: pricingConfig,
-  shopify: shopifyConfig,
-  klaviyo: klaviyoConfig,
-  hubspot: hubspotConfig,
-  pagination: paginationConfig,
-  search: searchConfig,
-  seo: seoConfig,
-  cache: cacheConfig,
-  demo: demoConfig,
-  retailers: retailersConfig,
-  features,
-};
+  ai: {
+    model: getString(process.env.ANTHROPIC_MODEL, 'claude-3-5-sonnet-20241022'),
+    visionModel: getString(process.env.ANTHROPIC_VISION_MODEL, 'claude-3-5-sonnet-20241022'),
+    maxTokens: getNumber(process.env.ANTHROPIC_MAX_TOKENS, 4096),
+  },
+  shopify: {
+    apiVersion: getString(process.env.SHOPIFY_API_VERSION, '2025-01'),
+    metafieldNamespace: getString(process.env.SHOPIFY_METAFIELD_NAMESPACE, 'cht'),
+  },
+  images: {
+    bucket: getString(process.env.SUPABASE_STORAGE_BUCKET, 'product-images'),
+    quality: getNumber(process.env.IMAGE_WEBP_QUALITY, 82),
+    maxWidth: getNumber(process.env.IMAGE_MAX_WIDTH, 2048),
+    maxHeight: getNumber(process.env.IMAGE_MAX_HEIGHT, 2048),
+  },
+  hubspot: {
+    portalId: getString(process.env.HUBSPOT_PORTAL_ID),
+    rmaPipelineId: getString(process.env.HUBSPOT_RMA_PIPELINE_ID),
+    rmaStages,
+  },
+  klaviyo: {
+    apiKey: getString(process.env.KLAVIYO_PRIVATE_API_KEY),
+    revision: getString(process.env.KLAVIYO_API_REVISION, '2024-10-15'),
+    defaultFromEmail: getString(process.env.KLAVIYO_DEFAULT_FROM_EMAIL),
+    defaultFromLabel: getString(process.env.KLAVIYO_DEFAULT_FROM_LABEL),
+    defaultReplyToEmail: getString(process.env.KLAVIYO_DEFAULT_REPLY_TO_EMAIL),
+    productBaseUrl: getString(process.env.KLAVIYO_PRODUCT_BASE_URL),
+  },
+} as const;
 
-// Type exports for use in other files
-export type Config = typeof config;
-export type AIConfig = typeof aiConfig;
-export type ImageConfig = typeof imagesConfig;
-export type ScrapingConfig = typeof scrapingConfig;
-export type PricingConfig = typeof pricingConfig;
-
-export default config;
+export const scrapingConfig = {
+  timeoutMs: getNumber(process.env.SCRAPING_TIMEOUT_MS, 30000),
+  userAgent: getString(
+    process.env.SCRAPING_USER_AGENT,
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+  ),
+  retry: {
+    maxAttempts: getNumber(process.env.SCRAPING_RETRY_MAX_ATTEMPTS, 3),
+    delayMs: getNumber(process.env.SCRAPING_RETRY_DELAY_MS, 1000),
+    backoffMultiplier: getNumber(process.env.SCRAPING_RETRY_BACKOFF_MULTIPLIER, 2),
+  },
+  proxy: {
+    enabled: getBoolean(process.env.SCRAPING_PROXY_ENABLED, false),
+    url: getString(process.env.SCRAPING_PROXY_URL),
+  },
+} as const;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { v4 as uuidv4 } from 'uuid';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
 
 /**
  * Image Upload endpoint
@@ -17,6 +18,16 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting for file uploads
+    const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+    const rateCheck = checkRateLimit(rateLimiters.uploads, clientIp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateCheck.retryAfter },
+        { status: 429 }
+      );
+    }
+
     const formData = await request.formData();
     const files = formData.getAll('files') as File[];
     const productId = formData.get('productId') as string | null;
@@ -78,7 +89,7 @@ export async function POST(request: NextRequest) {
         const buffer = new Uint8Array(arrayBuffer);
 
         // Upload to Supabase Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('product-images')
           .upload(storagePath, buffer, {
             contentType: file.type,

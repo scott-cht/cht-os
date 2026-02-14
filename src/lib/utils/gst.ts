@@ -248,21 +248,8 @@ function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/**
- * Round to whole dollars (per PRD requirement for sales price)
- */
-export function roundToWholeDollars(value: number): number {
-  return Math.round(value);
-}
-
-/**
- * Calculate sales price from RRP with discount
- * Per PRD: "Sales Price = round(RRP * (1 - Discount%), 0)"
- */
-export function calculateSalesPrice(
-  rrpIncGst: number,
-  discountPercent: number
-): number {
-  const discountedPrice = rrpIncGst * (1 - discountPercent / 100);
-  return roundToWholeDollars(discountedPrice);
-}
+// Re-export shared pricing functions for convenience
+export { 
+  roundToWholeDollars, 
+  calculateSalesPrice 
+} from '@/lib/utils/pricing';

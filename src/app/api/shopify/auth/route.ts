@@ -19,7 +19,15 @@ export async function GET(request: NextRequest) {
   }
 
   // Build the OAuth URL manually
-  const scopes = 'write_products,read_products,write_inventory,read_inventory';
+  const scopes = [
+    'write_products',
+    'read_products',
+    'write_inventory',
+    'read_inventory',
+    'read_orders',
+    'read_returns',
+    'write_returns',
+  ].join(',');
   const redirectUri = `${request.nextUrl.protocol}//${request.nextUrl.host}/api/shopify/auth/callback`;
   const state = crypto.randomBytes(16).toString('hex'); // CSRF protection
   

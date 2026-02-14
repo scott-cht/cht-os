@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
 
 /**
  * Create a new product onboarding entry
@@ -9,6 +10,16 @@ import { createServerClient } from '@/lib/supabase/server';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+    const rateCheck = checkRateLimit(rateLimiters.products, clientIp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateCheck.retryAfter },
+        { status: 429 }
+      );
+    }
+
     const { brand, modelNumber, sourceUrl } = await request.json();
 
     if (!brand || !modelNumber || !sourceUrl) {
@@ -60,8 +71,18 @@ export async function POST(request: NextRequest) {
  * 
  * GET /api/products
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Rate limiting
+    const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+    const rateCheck = checkRateLimit(rateLimiters.products, clientIp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateCheck.retryAfter },
+        { status: 429 }
+      );
+    }
+
     const supabase = createServerClient();
 
     const { data, error } = await supabase

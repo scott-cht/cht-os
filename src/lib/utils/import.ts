@@ -5,6 +5,7 @@
  */
 
 import type { InventoryItem, ListingType, ConditionGrade, SyncStatus, ListingStatus } from '@/types';
+import { parsePrice } from '@/lib/utils/pricing';
 
 export interface CSVImportRow {
   brand?: string;
@@ -252,23 +253,7 @@ function validateRow(row: CSVImportRow, rowNumber: number): ParsedImportRow {
   return { data, errors, warnings, rowNumber };
 }
 
-/**
- * Parse price string to number
- */
-function parsePrice(value: string): number | null {
-  // Remove currency symbols, commas, and whitespace
-  const cleaned = value.replace(/[$,\s]/g, '').trim();
-  
-  if (!cleaned) return null;
-  
-  const parsed = parseFloat(cleaned);
-  
-  if (isNaN(parsed) || parsed < 0) {
-    return null;
-  }
-  
-  return Math.round(parsed * 100) / 100;
-}
+// parsePrice is imported from @/lib/utils/pricing
 
 /**
  * Validate all rows from CSV import

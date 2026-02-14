@@ -17,10 +17,8 @@ export function useCsrf() {
   const [isLoading, setIsLoading] = useState(!globalToken);
 
   useEffect(() => {
-    // If we already have a token, use it
+    // If we already have a token, nothing to fetch
     if (globalToken) {
-      setToken(globalToken);
-      setIsLoading(false);
       return;
     }
 

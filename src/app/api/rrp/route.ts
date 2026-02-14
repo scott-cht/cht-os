@@ -128,9 +128,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build search query focused on Australian retailers
-    const searchQuery = `${brand} ${model} price AUD site:.com.au`;
-    
     // Check if SerpAPI is configured
     const serpApiKey = process.env.SERPAPI_API_KEY;
     

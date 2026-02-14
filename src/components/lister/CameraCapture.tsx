@@ -1,6 +1,7 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 
 interface CameraCaptureProps {
@@ -28,6 +29,7 @@ export function CameraCapture({
   const [currentPreview, setCurrentPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const switchCameraTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Start camera
   const startCamera = useCallback(async () => {
@@ -68,8 +70,19 @@ export function CameraCapture({
   const switchCamera = useCallback(() => {
     stopCamera();
     setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-    setTimeout(startCamera, 100);
+    if (switchCameraTimerRef.current) {
+      clearTimeout(switchCameraTimerRef.current);
+    }
+    switchCameraTimerRef.current = setTimeout(startCamera, 100);
   }, [stopCamera, startCamera]);
+
+  useEffect(() => {
+    return () => {
+      if (switchCameraTimerRef.current) {
+        clearTimeout(switchCameraTimerRef.current);
+      }
+    };
+  }, []);
 
   // Capture photo
   const capturePhoto = useCallback(() => {
@@ -220,6 +233,7 @@ export function CameraCapture({
 
         {/* Captured image preview */}
         {currentPreview && !isCameraActive && (
+           
           <img
             src={currentPreview}
             alt="Captured"
@@ -233,6 +247,7 @@ export function CameraCapture({
             <div className="flex gap-2 overflow-x-auto pb-2 justify-center">
               {capturedImages.map((img, index) => (
                 <div key={index} className="relative flex-shrink-0">
+                  { }
                   <img
                     src={img}
                     alt={`Photo ${index + 1}`}

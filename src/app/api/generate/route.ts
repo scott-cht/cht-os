@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateProductContent } from '@/lib/ai/copywriter';
 import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
-import type { RawScrapedData, InventoryItem } from '@/types';
+import type { RawScrapedData } from '@/types';
 
 /**
  * AI Content Generation endpoint
@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
         specifications: (item.specifications as Record<string, string>) || {},
         images: item.image_urls || [],
       },
+      scrapedAt: new Date().toISOString(),
+      sourceUrl: item.source_url || '',
     };
 
     // Generate AI content

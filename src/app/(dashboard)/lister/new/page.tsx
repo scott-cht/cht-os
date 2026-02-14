@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -57,7 +58,7 @@ export default function NewRetailListerPage() {
           notify.info('No results', 'Try a different search query');
         }
       }
-    } catch (err) {
+    } catch {
       setError('Search failed. Please try again.');
       notify.error('Search failed', 'Please try again');
     } finally {
@@ -95,7 +96,7 @@ export default function NewRetailListerPage() {
         notify.success('Data scraped', 'Product data extracted successfully');
         setIsScraping(false);
       }
-    } catch (err) {
+    } catch {
       setError('Scraping failed. Please try again.');
       notify.error('Scraping failed', 'Please try again');
       setIsScraping(false);
@@ -174,7 +175,7 @@ export default function NewRetailListerPage() {
         notify.success('Listing created', 'Redirecting to inventory item...');
         router.push(`/inventory/${data.item.id}`);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create listing.');
       notify.error('Create failed', 'Failed to create listing');
     }
@@ -454,6 +455,7 @@ export default function NewRetailListerPage() {
                         <div className="mt-3 grid grid-cols-5 gap-2">
                           {images.slice(0, 10).map((url, i) => (
                             <div key={i} className="aspect-square bg-zinc-200 dark:bg-zinc-700 rounded overflow-hidden">
+                              { }
                               <img 
                                 src={url} 
                                 alt={`Product image ${i + 1}`}

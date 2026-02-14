@@ -25,7 +25,7 @@ const SYSTEM_PROMPT = `You are an expert Australian e-commerce copywriter specia
 
 Your writing must:
 - Be 100% unique and not plagiarize source material
-- Use Australian English spelling (colour, metre, litre)
+- ALWAYS use Australian English spelling: colour (not color), metre (not meter), litre (not liter), optimised (not optimized), organised (not organized), centre (not center), analyse (not analyze), favour (not favor), behaviour (not behavior)
 - Include GST-inclusive pricing references when relevant
 - Focus on customer benefits, not just features
 - Be professional yet approachable in tone
@@ -33,7 +33,8 @@ Your writing must:
 CRITICAL CONSTRAINTS:
 - Product titles MUST be under 60 characters
 - Meta descriptions MUST be exactly 150-155 characters with a call-to-action
-- All measurements must use metric units (mm, cm, kg, L)
+- SPEAKER/SUBWOOFER DRIVER SIZES: Keep in inches (e.g., 13" driver, 12" woofer) - do NOT convert to mm
+- PRODUCT DIMENSIONS: Convert to metric (mm, cm, kg, L) - e.g., cabinet dimensions, weight
 - Never use superlatives like "best" or "cheapest" without evidence
 
 You must respond with valid JSON only, no markdown or code blocks.`;
@@ -64,16 +65,8 @@ export async function generateProductContent(input: CopywriterInput): Promise<AI
     .join('\n');
 
   const imageCount = rawData.htmlParsed?.images?.length || 0;
-
-  // Build specifications table HTML if we have specs
-  const specsTableHtml = Object.keys(normalizedSpecs).length > 0
-    ? `<table class="specifications-table">
-<thead><tr><th colspan="2">Technical Specifications</th></tr></thead>
-<tbody>
-${Object.entries(normalizedSpecs).map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('\n')}
-</tbody>
-</table>`
-    : '';
+  
+  const hasSpecs = Object.keys(normalizedSpecs).length > 0;
 
   const userPrompt = `Generate SEO-optimized product content for this Australian e-commerce listing:
 
@@ -86,36 +79,43 @@ SOURCE DATA (rewrite completely - do not copy):
 Title: ${sourceTitle}
 Description: ${sourceDescription}
 
-SPECIFICATIONS (use metric units):
+SPECIFICATIONS:
 ${specsList || 'No specifications available'}
 
 IMAGES: ${imageCount} product images available
 
-REQUIRED OUTPUT (respond with JSON only, no markdown):
-{
-  "title": "SEO title under 60 chars: [Brand] [Model] [Category] - [Key Feature]",
-  "metaDescription": "Exactly 150-155 chars with CTA. End with 'Shop now' or 'Order today'",
-  "descriptionHtml": "Create rich HTML content with this EXACT structure:
-    1. Opening <div class='product-intro'> with 2-3 compelling sentences about benefits
-    2. <h3>Key Features</h3> followed by <ul class='feature-list'> with 4-6 benefit-focused bullet points
-    3. <h3>Why Choose ${brand}?</h3> with a short paragraph about brand quality
-    4. Include the specifications table: ${specsTableHtml ? 'INCLUDE THIS EXACT TABLE IN YOUR OUTPUT: ' + specsTableHtml.replace(/"/g, '\\"').replace(/\n/g, '') : 'Skip specifications section if none available'}
-    Make it comprehensive, at least 300 words total.",
-  "altTexts": ["Alt text for image 1", "Alt text for image 2", "etc - generate ${imageCount} alt texts"]
-}
+Generate a JSON response with these fields:
 
-CRITICAL REQUIREMENTS:
-- Title MUST be under 60 characters
-- Meta description MUST be 150-155 characters
-- Description MUST be comprehensive (300+ words) with proper HTML structure
-- Include the specifications table if provided above
-- Content must be 100% unique - completely rewrite, don't copy
-- Use Australian English (colour, metre, litre)
-- Return valid JSON only, no markdown code blocks`;
+1. "title": SEO-optimized product title under 60 characters. Format: [Brand] [Model] [Category] - [Key Benefit]
+
+2. "metaDescription": Exactly 150-155 characters with a call-to-action ending like "Shop now" or "Order today"
+
+3. "descriptionHtml": Create compelling HTML product description with this structure:
+   - Opening paragraph (2-3 sentences) about the product benefits wrapped in <p> tags
+   - <h3>Key Features</h3> section with <ul> containing 4-6 benefit-focused <li> items
+   - <h3>Why Choose ${brand}?</h3> with a paragraph about brand quality/reputation
+   ${hasSpecs ? `- <h3>Technical Specifications</h3> followed by a properly formatted HTML table. IMPORTANT: Use this EXACT format:
+     <table class="specifications-table">
+       <tbody>
+         <tr><th>Driver Size</th><td>13" High-Excursion SVS</td></tr>
+         <tr><th>Power Output</th><td>800W RMS / 2,500W Peak</td></tr>
+       </tbody>
+     </table>
+     Each specification MUST be in its own <tr> row with <th> for the label and <td> for the value. Do NOT concatenate specs together.` : ''}
+   - Make content comprehensive (300+ words minimum)
+
+4. "altTexts": Array of ${imageCount} descriptive alt texts for product images
+
+CRITICAL RULES:
+- AUSTRALIAN ENGLISH ONLY: Use colour, metre, litre, optimised, centre (NOT American spellings)
+- SPEAKER DRIVERS: Keep sizes in inches (13", 12", 10" etc.) - do NOT convert to mm
+- PRODUCT DIMENSIONS: Convert to metric (mm for size, kg for weight)
+- Content must be 100% unique - completely rewrite source material
+- Return ONLY valid JSON, no markdown code blocks or backticks`;
 
   const response = await getAnthropic().messages.create({
     model: config.ai.model,
-    max_tokens: 1500,
+    max_tokens: 2500,
     messages: [
       { 
         role: 'user', 
@@ -133,15 +133,94 @@ CRITICAL REQUIREMENTS:
 
   const content = textContent.text;
   
-  // Parse JSON from response (handle potential markdown wrapping)
+  // Parse JSON from response (handle potential markdown wrapping and malformed JSON)
   let jsonStr = content;
+  
+  // Remove markdown code blocks
   if (content.includes('```json')) {
     jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '');
   } else if (content.includes('```')) {
     jsonStr = content.replace(/```\n?/g, '');
   }
   
-  const parsed = JSON.parse(jsonStr.trim()) as AIGeneratedContent;
+  // Try to extract JSON object if there's extra content
+  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[0];
+  }
+  
+  let parsed: AIGeneratedContent;
+  try {
+    parsed = JSON.parse(jsonStr.trim()) as AIGeneratedContent;
+  } catch (parseError) {
+    // Try to fix common JSON issues
+    console.error('Initial JSON parse failed, attempting repair...');
+    
+    // Try a more careful approach: find each field's value
+    try {
+      // Extract title - simple string field
+      const titleMatch = jsonStr.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const title = titleMatch ? titleMatch[1].replace(/\\"/g, '"').replace(/\\n/g, ' ') : '';
+      
+      // Extract metaDescription - simple string field
+      const metaMatch = jsonStr.match(/"metaDescription"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const metaDescription = metaMatch ? metaMatch[1].replace(/\\"/g, '"').replace(/\\n/g, ' ') : '';
+      
+      // Extract descriptionHtml - this is the tricky one with HTML content
+      // Find the start of descriptionHtml value
+      const descStartIdx = jsonStr.indexOf('"descriptionHtml"');
+      let descriptionHtml = '';
+      
+      if (descStartIdx !== -1) {
+        // Find the opening quote after the colon
+        const colonIdx = jsonStr.indexOf(':', descStartIdx);
+        const openQuoteIdx = jsonStr.indexOf('"', colonIdx);
+        
+        if (openQuoteIdx !== -1) {
+          // Find the closing quote - need to handle escaped quotes
+          let closeQuoteIdx = openQuoteIdx + 1;
+          let escaped = false;
+          
+          while (closeQuoteIdx < jsonStr.length) {
+            const char = jsonStr[closeQuoteIdx];
+            if (escaped) {
+              escaped = false;
+            } else if (char === '\\') {
+              escaped = true;
+            } else if (char === '"') {
+              break;
+            }
+            closeQuoteIdx++;
+          }
+          
+          if (closeQuoteIdx < jsonStr.length) {
+            descriptionHtml = jsonStr
+              .substring(openQuoteIdx + 1, closeQuoteIdx)
+              .replace(/\\"/g, '"')
+              .replace(/\\n/g, '\n')
+              .replace(/\\r/g, '')
+              .replace(/\\t/g, '  ');
+          }
+        }
+      }
+      
+      if (!title || !metaDescription) {
+        throw new Error('Could not extract required fields');
+      }
+      
+      parsed = {
+        title,
+        metaDescription,
+        descriptionHtml,
+        altTexts: [],
+      };
+      
+      console.log('Successfully extracted fields manually');
+    } catch (extractError) {
+      console.error('Field extraction failed:', extractError);
+      throw new Error(`Failed to parse AI response: ${parseError instanceof Error ? parseError.message : 'Invalid JSON'}`);
+    }
+  }
   
   // Validate constraints
   if (parsed.title.length > 60) {

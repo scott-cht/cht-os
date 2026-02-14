@@ -6,7 +6,7 @@
 
 import { createServerClient } from '@/lib/supabase/server';
 
-export type EntityType = 'inventory_item' | 'product_onboarding' | 'oauth_token' | 'sync';
+export type EntityType = 'inventory_item' | 'product_onboarding' | 'oauth_token' | 'sync' | 'rma_case';
 export type AuditAction = 
   | 'create' 
   | 'update' 

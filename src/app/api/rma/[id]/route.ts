@@ -6,7 +6,13 @@ import {
   validateBody,
   ValidationError,
 } from '@/lib/validation/schemas';
-import { normalizeSerialNumber, upsertSerialRegistry } from '@/lib/rma/service';
+import {
+  appendSerialServiceEvent,
+  mapRmaStatusToEvent,
+  normalizeSerialNumber,
+  upsertSerialRegistry,
+} from '@/lib/rma/service';
+import type { RmaStatus } from '@/types';
 
 export async function GET(
   request: NextRequest,
@@ -104,6 +110,32 @@ export async function PATCH(
       }
     }
 
+    const nowIso = new Date().toISOString();
+    const automationNotes: string[] = [];
+    const existingInboundTracking = existing.inbound_tracking_number as string | null;
+    const incomingInboundTracking = (body.inbound_tracking_number ?? existingInboundTracking) as string | null;
+    if (!existingInboundTracking && incomingInboundTracking && !body.received_at && !existing.received_at) {
+      updatePayload.received_at = nowIso;
+      automationNotes.push('Auto-set received_at after inbound tracking was added.');
+    }
+
+    const existingOutboundTracking = existing.outbound_tracking_number as string | null;
+    const incomingOutboundTracking = (body.outbound_tracking_number ?? existingOutboundTracking) as string | null;
+    const existingStatus = existing.status as RmaStatus;
+    if (!existingOutboundTracking && incomingOutboundTracking) {
+      if (!body.shipped_back_at && !existing.shipped_back_at) {
+        updatePayload.shipped_back_at = nowIso;
+        automationNotes.push('Auto-set shipped_back_at after outbound tracking was added.');
+      }
+      if (!body.status && existingStatus !== 'back_to_customer') {
+        updatePayload.status = 'back_to_customer';
+        if (!existing.closed_at) {
+          updatePayload.closed_at = nowIso;
+        }
+        automationNotes.push('Auto-moved status to back_to_customer after outbound tracking was added.');
+      }
+    }
+
     const { data: updatedCase, error } = await supabase
       .from('rma_cases')
       .update(updatePayload)
@@ -111,13 +143,43 @@ export async function PATCH(
       .select('*')
       .single();
     if (error || !updatedCase) {
+      const missingColumn = error?.message?.includes('column') && error?.message?.includes('rma_cases');
+      if (missingColumn) {
+        return NextResponse.json(
+          {
+            error:
+              'RMA ops enrichment fields are not available yet. Apply migrations 017_rma_ops_enrichment.sql and 018_rma_assignment_fields.sql, then retry.',
+          },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { error: error?.message || 'Failed to update RMA case' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ success: true, case: updatedCase });
+    if (updatedCase.serial_number && automationNotes.length > 0) {
+      const serialNumber = normalizeSerialNumber(updatedCase.serial_number);
+      if (serialNumber) {
+        const registry = await upsertSerialRegistry(supabase, {
+          serialNumber,
+          inventoryItemId: updatedCase.inventory_item_id || null,
+        });
+        await appendSerialServiceEvent(supabase, {
+          serialRegistryId: registry.id,
+          rmaCaseId: updatedCase.id,
+          eventType: updatePayload.status ? mapRmaStatusToEvent(updatePayload.status as RmaStatus) : 'service_note',
+          summary: 'RMA logistics automation applied',
+          notes: automationNotes.join(' '),
+          metadata: {
+            automation_notes: automationNotes,
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({ success: true, case: updatedCase, automationNotes });
   } catch (error) {
     if (error instanceof ValidationError) {
       return NextResponse.json(

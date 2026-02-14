@@ -767,8 +767,6 @@ async function parseHtml(page: import('playwright').Page) {
     for (const selector of descriptionSelectors) {
       const el = document.querySelector(selector);
       if (el) {
-        // Get inner HTML to preserve formatting, then clean it
-        const html = el.innerHTML;
         // Also get text content as fallback
         const text = el.textContent?.trim();
         if (text && text.length > 50) {

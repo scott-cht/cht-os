@@ -170,8 +170,8 @@ export function handleError(err: unknown): NextResponse<ApiErrorResponse> {
   
   // Handle Zod errors
   if (err instanceof ZodError) {
-    const messages = err.errors.map(e => `${e.path.join('.')}: ${e.message}`);
-    return errors.validation(messages.join('; '), err.errors);
+    const messages = err.issues.map(e => `${e.path.join('.')}: ${e.message}`);
+    return errors.validation(messages.join('; '), err.issues);
   }
   
   // Handle standard errors

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@/lib/supabase/server';
 import { checkRateLimit, rateLimiters } from '@/lib/utils/rate-limiter';
 import {
@@ -10,19 +11,13 @@ import {
 interface ShopifyOrderDetail {
   id: string;
   name: string;
-  orderNumber: number;
+  legacyResourceId: string | null;
   processedAt: string;
   displayFinancialStatus: string;
   displayFulfillmentStatus: string;
   email: string | null;
   phone: string | null;
   note: string | null;
-  customer: {
-    firstName: string | null;
-    lastName: string | null;
-    email: string | null;
-    phone: string | null;
-  } | null;
   shippingAddress: {
     name: string | null;
     phone: string | null;
@@ -84,6 +79,29 @@ function extractSerialCandidates(order: ShopifyOrderDetail): string[] {
   return Array.from(candidates);
 }
 
+function parseOrderNumber(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+async function getStoredShopifyScope(shop: string): Promise<string | null> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null;
+  }
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data } = await supabase
+    .from('oauth_tokens')
+    .select('scope')
+    .eq('provider', 'shopify')
+    .eq('shop', shop)
+    .maybeSingle();
+  return data?.scope || null;
+}
+
 /**
  * GET /api/rma/orders/[id]
  * Fetch a single Shopify order for RMA intake.
@@ -107,6 +125,20 @@ export async function GET(
         { error: 'Shopify is not configured' },
         { status: 503 }
       );
+    }
+
+    const shop = process.env.SHOPIFY_STORE_DOMAIN;
+    const hasStaticAdminToken = Boolean(process.env.SHOPIFY_ADMIN_ACCESS_TOKEN);
+    if (shop && !hasStaticAdminToken) {
+      const scope = await getStoredShopifyScope(shop);
+      if (scope && !scope.split(',').map((item) => item.trim()).includes('read_orders')) {
+        return NextResponse.json(
+          {
+            error: 'Shopify token is missing read_orders scope. Re-authorize via /api/shopify/auth and approve order scopes.',
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const graphqlClient = await getGraphQLClient();
@@ -158,15 +190,15 @@ export async function GET(
       order: {
         id: order.id,
         name: order.name,
-        orderNumber: order.orderNumber,
+        orderNumber: parseOrderNumber(order.legacyResourceId),
         processedAt: order.processedAt,
         financialStatus: order.displayFinancialStatus,
         fulfillmentStatus: order.displayFulfillmentStatus,
         note: order.note,
         customer: {
-          name: [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(' ') || null,
-          email: order.customer?.email || order.email,
-          phone: order.customer?.phone || order.phone,
+          name: order.shippingAddress?.name || null,
+          email: order.email,
+          phone: order.phone,
         },
         shippingAddress: order.shippingAddress,
         lineItems: order.lineItems.edges.map(({ node }) => ({
@@ -193,8 +225,17 @@ export async function GET(
     });
   } catch (error) {
     console.error('RMA order detail error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch order';
+    if (message.toLowerCase().includes('access denied') && message.toLowerCase().includes('orders')) {
+      return NextResponse.json(
+        {
+          error: 'Access denied for orders field. Re-authorize Shopify app via /api/shopify/auth with read_orders scope.',
+        },
+        { status: 403 }
+      );
+    }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch order' },
+      { error: message },
       { status: 500 }
     );
   }

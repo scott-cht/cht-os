@@ -9,3 +9,4 @@ export { SyncProgress, SyncProgressInline } from './SyncProgress';
 export * from './Skeleton';
 export { ConfirmDialog, useConfirmDialog } from './ConfirmDialog';
 export { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
+export { RichTextEditor, HtmlViewer } from './RichTextEditor';

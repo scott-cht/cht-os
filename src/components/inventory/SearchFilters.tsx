@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils/cn';
-import { Input } from '@/components/ui/Input';
 
 export interface FilterState {
   search: string;
@@ -63,7 +62,7 @@ export function SearchFilters({ filters, onChange, onSearch, isLoading }: Search
       if (filters.search) onSearch();
     }, 300);
     return () => clearTimeout(timer);
-  }, [filters.search]);
+  }, [filters.search, onSearch]);
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-4">
@@ -245,4 +244,3 @@ export function SearchFilters({ filters, onChange, onSearch, isLoading }: Search
 }
 
 export { defaultFilters };
-export type { FilterState };

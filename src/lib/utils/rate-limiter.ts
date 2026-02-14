@@ -110,6 +110,21 @@ export const rateLimiters = {
   
   // General scraping: Be polite to target sites
   scraping: new RateLimiter({ maxRequests: 10, windowMs: 60000 }),
+  
+  // Inventory API: General CRUD operations
+  inventory: new RateLimiter({ maxRequests: 100, windowMs: 60000 }),
+  
+  // Bulk operations: More expensive operations
+  bulk: new RateLimiter({ maxRequests: 10, windowMs: 60000 }),
+  
+  // Image uploads: File operations
+  uploads: new RateLimiter({ maxRequests: 30, windowMs: 60000 }),
+  
+  // Products API: Product creation
+  products: new RateLimiter({ maxRequests: 50, windowMs: 60000 }),
+
+  // Klaviyo API: Templates and campaigns
+  klaviyo: new RateLimiter({ maxRequests: 30, windowMs: 60000 }),
 };
 
 /**

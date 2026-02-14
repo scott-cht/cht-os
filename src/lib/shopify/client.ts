@@ -76,7 +76,15 @@ export function hasShopifyConfig(): boolean {
 export const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY || '',
   apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
-  scopes: ['write_products', 'read_products', 'write_inventory', 'read_inventory', 'read_orders'],
+  scopes: [
+    'write_products',
+    'read_products',
+    'write_inventory',
+    'read_inventory',
+    'read_orders',
+    'read_returns',
+    'write_returns',
+  ],
   hostName: shopifyDomain?.replace('https://', '').replace('.myshopify.com', '') || '',
   apiVersion: ApiVersion.January25,
   isEmbeddedApp: false,
@@ -320,19 +328,15 @@ export const FETCH_ORDERS_QUERY = `
         node {
           id
           name
-          orderNumber
+          legacyResourceId
           processedAt
           displayFinancialStatus
           displayFulfillmentStatus
-          customer {
-            id
-            firstName
-            lastName
-            email
-            phone
-          }
           email
           phone
+          shippingAddress {
+            name
+          }
           lineItems(first: 10) {
             edges {
               node {
@@ -369,20 +373,19 @@ export const FETCH_ORDER_BY_ID_QUERY = `
     order(id: $id) {
       id
       name
-      orderNumber
+      legacyResourceId
       processedAt
       displayFinancialStatus
       displayFulfillmentStatus
+      currentTotalPriceSet {
+        shopMoney {
+          amount
+          currencyCode
+        }
+      }
       email
       phone
       note
-      customer {
-        id
-        firstName
-        lastName
-        email
-        phone
-      }
       shippingAddress {
         name
         phone

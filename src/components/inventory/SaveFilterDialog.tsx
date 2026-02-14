@@ -20,6 +20,7 @@ export function SaveFilterDialog({ isOpen, onClose, filters, onSave }: SaveFilte
   const [selectedIcon, setSelectedIcon] = useState('📋');
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -27,8 +28,17 @@ export function SaveFilterDialog({ isOpen, onClose, filters, onSave }: SaveFilte
       setName('');
       setSelectedIcon('📋');
       // Focus input after a brief delay
-      setTimeout(() => inputRef.current?.focus(), 100);
+      if (focusTimerRef.current) {
+        clearTimeout(focusTimerRef.current);
+      }
+      focusTimerRef.current = setTimeout(() => inputRef.current?.focus(), 100);
     }
+    return () => {
+      if (focusTimerRef.current) {
+        clearTimeout(focusTimerRef.current);
+        focusTimerRef.current = null;
+      }
+    };
   }, [isOpen]);
 
   // Handle escape key

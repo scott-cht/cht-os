@@ -22,27 +22,10 @@ type ImportStep = 'upload' | 'preview' | 'importing' | 'complete';
 export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<ImportStep>('upload');
-  const [csvText, setCsvText] = useState<string>('');
   const [validation, setValidation] = useState<ImportValidationResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; warnings: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      setCsvText(text);
-      processCSV(text);
-    };
-    reader.onerror = () => {
-      setError('Failed to read file');
-    };
-    reader.readAsText(file);
-  }, []);
 
   const processCSV = useCallback((text: string) => {
     setError(null);
@@ -55,6 +38,21 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
       setError(err instanceof Error ? err.message : 'Failed to parse CSV');
     }
   }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      processCSV(text);
+    };
+    reader.onerror = () => {
+      setError('Failed to read file');
+    };
+    reader.readAsText(file);
+  }, [processCSV]);
 
   const handleImport = useCallback(async () => {
     if (!validation || validation.validCount === 0) return;
@@ -84,7 +82,7 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
         setStep('complete');
         notify.success('Import complete', `Imported ${data.imported} items`);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to import items');
       notify.error('Import failed', 'Please try again');
     } finally {
@@ -94,7 +92,6 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
 
   const handleClose = useCallback(() => {
     // Reset state
-    setCsvText('');
     setValidation(null);
     setImportResult(null);
     setError(null);
@@ -120,7 +117,6 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
       const reader = new FileReader();
       reader.onload = (event) => {
         const text = event.target?.result as string;
-        setCsvText(text);
         processCSV(text);
       };
       reader.readAsText(file);
@@ -356,7 +352,6 @@ export function ImportDialog({ isOpen, onClose, onSuccess }: ImportDialogProps) 
                 variant="secondary" 
                 onClick={() => {
                   setStep('upload');
-                  setCsvText('');
                   setValidation(null);
                 }}
               >

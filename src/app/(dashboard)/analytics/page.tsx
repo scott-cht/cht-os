@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 
 export default function AnalyticsPage() {
   return (
-    <Shell title="Analytics Dashboard" subtitle="Phase 4 - Coming Soon">
+    <Shell title="CHT Core" subtitle="Phase 6 - Coming Soon">
       <div className="max-w-2xl mx-auto">
         <Card className="p-8 text-center">
           <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-6">
@@ -15,11 +15,11 @@ export default function AnalyticsPage() {
           </div>
           
           <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-3">
-            Business KOI Dashboard
+            CHT Core — Business Intelligence
           </h2>
           
           <p className="text-zinc-600 dark:text-zinc-400 mb-8 max-w-md mx-auto">
-            Real-time business health visibility. Track sales, expenses, and marketing ROI all in one unified view.
+            Real-time business health visibility. Trade-in velocity, RMA rates, email-to-sale ROI, and regional demand—all in one view.
           </p>
 
           <div className="grid grid-cols-2 gap-4 mb-8">
@@ -62,7 +62,7 @@ export default function AnalyticsPage() {
 
           <div className="p-4 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
             <p className="text-sm text-zinc-500">
-              <span className="font-medium">Phase 4</span> • Development will begin after Phase 3 (Klaviyo Engine) is complete
+              <span className="font-medium">Phase 6</span> • Development will begin after Post-Sales (RMA) and Expert Value-Add phases
             </p>
           </div>
         </Card>

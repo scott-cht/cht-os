@@ -17,17 +17,19 @@ import {
 } from '@/components/inventory';
 import { PrintLabelsDialog, usePrintLabelsDialog } from '@/components/labels';
 import { notify } from '@/lib/store/app-store';
-import type { InventoryItem, ListingType, SyncStatus } from '@/types';
+import type { InventoryItem, ListingType, SyncStatus, ListingStatus } from '@/types';
 import type { InventoryFilters } from '@/types/filters';
 
 type FilterType = 'all' | ListingType;
 type FilterSync = 'all' | SyncStatus;
+type FilterListingStatus = 'all' | ListingStatus;
 
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterSync, setFilterSync] = useState<FilterSync>('all');
+  const [filterListingStatus, setFilterListingStatus] = useState<FilterListingStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const importDialog = useImportDialog();
@@ -66,6 +68,7 @@ export default function InventoryPage() {
   const currentFilters: InventoryFilters = {
     listing_type: filterType,
     sync_status: filterSync,
+    listing_status: filterListingStatus,
     search: searchQuery || undefined,
   };
 
@@ -73,6 +76,7 @@ export default function InventoryPage() {
   const handleApplyPreset = useCallback((filters: InventoryFilters) => {
     setFilterType((filters.listing_type as FilterType) || 'all');
     setFilterSync((filters.sync_status as FilterSync) || 'all');
+    setFilterListingStatus((filters.listing_status as FilterListingStatus) || 'all');
     setSearchQuery(filters.search || '');
     setIsLoading(true);
   }, []);
@@ -86,6 +90,9 @@ export default function InventoryPage() {
         }
         if (filterSync !== 'all') {
           params.set('sync_status', filterSync);
+        }
+        if (filterListingStatus !== 'all') {
+          params.set('listing_status', filterListingStatus);
         }
         
         const response = await fetch(`/api/inventory?${params.toString()}`);
@@ -102,7 +109,7 @@ export default function InventoryPage() {
     }
 
     fetchInventory();
-  }, [filterType, filterSync]);
+  }, [filterType, filterSync, filterListingStatus]);
 
   // Filter by search query
   const filteredItems = items.filter(item => {
@@ -250,6 +257,29 @@ export default function InventoryPage() {
             ))}
           </div>
         </div>
+
+        {/* Listing Status Filter (second row) */}
+        <div className="flex items-center gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+          <span className="text-sm text-zinc-500 mr-2">Listing Status:</span>
+          {(['all', 'pending_enrichment', 'on_demo', 'ready_to_sell', 'sold'] as FilterListingStatus[]).map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilterListingStatus(status)}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                filterListingStatus === status
+                  ? status === 'pending_enrichment'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-emerald-500 text-white'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {status === 'all' ? 'All' : 
+               status === 'pending_enrichment' ? 'Pending Enrichment' :
+               status === 'on_demo' ? 'On Demo' :
+               status === 'ready_to_sell' ? 'Ready to Sell' : 'Sold'}
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* Items List */}
@@ -389,23 +419,40 @@ export default function InventoryPage() {
                 </div>
 
                 {/* Status */}
-                <div className="col-span-2">
-                  <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full ${
-                    item.sync_status === 'synced' 
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                      : item.sync_status === 'syncing'
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                      : item.sync_status === 'error'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                  }`}>
-                    {item.sync_status}
-                  </span>
+                <div className="col-span-2 flex flex-col gap-1">
+                  {item.listing_status === 'pending_enrichment' && (
+                    <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 w-fit">
+                      Needs Enrichment
+                    </span>
+                  )}
+                  {item.listing_status !== 'pending_enrichment' && (
+                    <span className={`inline-flex px-2.5 py-1 text-xs font-medium rounded-full w-fit ${
+                      item.sync_status === 'synced' 
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : item.sync_status === 'syncing'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        : item.sync_status === 'error'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400'
+                    }`}>
+                      {item.sync_status}
+                    </span>
+                  )}
                 </div>
 
                 {/* Actions */}
                 <div className="col-span-2 flex justify-end gap-2">
-                  {item.sync_status === 'pending' && (
+                  {item.listing_status === 'pending_enrichment' && (
+                    <Link href={`/inventory/${item.id}/enrich`}>
+                      <Button
+                        size="sm"
+                        className="bg-amber-500 hover:bg-amber-600 text-white"
+                      >
+                        Enrich
+                      </Button>
+                    </Link>
+                  )}
+                  {item.sync_status === 'pending' && item.listing_status !== 'pending_enrichment' && (
                     <Button
                       size="sm"
                       onClick={() => handleSync(item.id)}

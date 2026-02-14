@@ -30,12 +30,9 @@ export function KeyboardShortcutsHelp({
   title = 'Keyboard Shortcuts',
 }: KeyboardShortcutsHelpProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [isMac, setIsMac] = useState(true);
-  
-  // Detect platform on mount
-  useEffect(() => {
-    setIsMac(navigator.platform.toLowerCase().includes('mac'));
-  }, []);
+  const [isMac] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.platform.toLowerCase().includes('mac') : true
+  );
   
   // Handle escape key
   useEffect(() => {

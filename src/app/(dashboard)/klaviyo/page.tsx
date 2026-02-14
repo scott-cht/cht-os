@@ -1,56 +1,247 @@
 'use client';
 
+import { useCallback } from 'react';
 import { Shell } from '@/components/shell';
-import { Card } from '@/components/ui/Card';
+import { StyleGuidePreviewModal } from '@/components/klaviyo/StyleGuidePreviewModal';
+import { EditSectionsModal } from '@/components/klaviyo/EditSectionsModal';
+import { ImportFromKlaviyoModal } from '@/components/klaviyo/ImportFromKlaviyoModal';
+import { CreateEmailCard } from '@/components/klaviyo/CreateEmailCard';
+import { EmailPreviewCard } from '@/components/klaviyo/EmailPreviewCard';
+import { StyleGuidesCard } from '@/components/klaviyo/StyleGuidesCard';
+import { StudioIntroBlocks } from '@/components/klaviyo/StudioIntroBlocks';
+import { useEmailPreviewEditor } from '@/hooks/useEmailPreviewEditor';
+import { useKlaviyoStudioData } from '@/hooks/useKlaviyoStudioData';
+import { useKlaviyoInventoryPicker } from '@/hooks/useKlaviyoInventoryPicker';
+import { useKlaviyoComposer } from '@/hooks/useKlaviyoComposer';
+
+const MAX_PICKER_SELECT = 12;
+const INTENT_PRESETS = [
+  'New arrivals',
+  'Trade-in highlights',
+  'Ex-demo clearance',
+  'Product spotlight',
+  'Weekly picks',
+];
 
 export default function KlaviyoPage() {
+  const {
+    filterListingTypes,
+    filterLimit,
+    setFilterLimit,
+    selectedInventoryIds,
+    pickerItems,
+    pickerTotal,
+    pickerOffset,
+    pickerLoading,
+    pickerSearch,
+    setPickerSearch,
+    pickerListingType,
+    setPickerListingType,
+    fetchInventoryForPicker,
+    quickFillFromFilter,
+    togglePickerProduct,
+    clearPickerSelection,
+    toggleFilterListingType,
+  } = useKlaviyoInventoryPicker({ maxPickerSelect: MAX_PICKER_SELECT });
+  const {
+    preview,
+    setPreview,
+    editableKeyText,
+    setEditableKeyText,
+    previewTab,
+    setPreviewTab,
+    safePreviewHtml,
+    handlePreviewSubjectChange,
+    handlePreviewPreheaderChange,
+    handlePreviewTabChange,
+    handleHeadlineChange,
+    handleBodyChange,
+    handleCtaChange,
+    handlePreviewHtmlChange,
+  } = useEmailPreviewEditor();
+  const {
+    selectedGuideIds,
+    setSelectedGuideIds,
+    intent,
+    setIntent,
+    generating,
+    pushing,
+    createCampaign,
+    setCreateCampaign,
+    handleGenerate,
+    handleCopy,
+    handlePush,
+    handleSelectedGuideChange,
+  } = useKlaviyoComposer({
+    selectedInventoryIds,
+    filterListingTypes,
+    filterLimit,
+    setPreview,
+    setEditableKeyText,
+    setPreviewTab,
+  });
+  const {
+    klaviyoReady,
+    styleGuides,
+    loadingGuides,
+    importModalOpen,
+    setImportModalOpen,
+    templates,
+    campaigns,
+    selectedTemplateIds,
+    selectedCampaignMessages,
+    campaignMessagesCache,
+    loadingMessages,
+    exporting,
+    previewGuide,
+    setPreviewGuide,
+    editGuide,
+    setEditGuide,
+    editLayoutNotes,
+    setEditLayoutNotes,
+    editSectionTags,
+    savingNotes,
+    openImportModal,
+    selectAllTemplates,
+    clearTemplates,
+    selectAllMessages,
+    clearMessages,
+    selectCampaignMessages,
+    deselectCampaignMessages,
+    openPreview,
+    openEditSections,
+    saveLayoutNotes,
+    addSectionTag,
+    updateSectionTag,
+    removeSectionTag,
+    toggleTemplate,
+    toggleCampaignMessage,
+    handleExportSelected,
+    deleteStyleGuide,
+    safeGuideHtml,
+  } = useKlaviyoStudioData();
+
+  const handleDeleteStyleGuide = useCallback(async (id: string) => {
+    const deleted = await deleteStyleGuide(id);
+    if (deleted) {
+      setSelectedGuideIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }, [deleteStyleGuide, setSelectedGuideIds]);
+
+  const handleToggleFilterListingType = useCallback((listingType: string) => {
+    toggleFilterListingType(listingType);
+  }, [toggleFilterListingType]);
+
   return (
-    <Shell title="Email Studio" subtitle="Phase 3 - Coming Soon">
-      <div className="max-w-2xl mx-auto">
-        <Card className="p-8 text-center">
-          <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </div>
-          
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-3">
-            Email Studio
-          </h2>
-          
-          <p className="text-zinc-600 dark:text-zinc-400 mb-8 max-w-md mx-auto">
-            Generate AI-powered marketing emails from your inventory data. Pull products directly into beautiful Klaviyo templates.
-          </p>
+    <Shell title="Email Studio" subtitle="Klaviyo Marketing Engine">
+      <div className="max-w-4xl space-y-8">
+        <StudioIntroBlocks klaviyoReady={klaviyoReady} />
 
-          <div className="space-y-4 text-left bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-6">
-            <h3 className="font-semibold text-zinc-900 dark:text-white">Planned Features:</h3>
-            <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                AI-generated email copy based on CHT brand voice
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Pull product data directly from inventory
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Klaviyo template integration
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Campaign performance tracking
-              </li>
-            </ul>
-          </div>
+        <StyleGuidesCard
+          loadingGuides={loadingGuides}
+          styleGuides={styleGuides}
+          klaviyoReady={klaviyoReady}
+          onOpenPreview={openPreview}
+          onOpenEditSections={openEditSections}
+          onDeleteStyleGuide={handleDeleteStyleGuide}
+          onOpenImportModal={openImportModal}
+        />
 
-          <div className="mt-8 p-4 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
-            <p className="text-sm text-zinc-500">
-              <span className="font-medium">Phase 3</span> • Development will begin after Phase 2 (CRM Automation) is complete
-            </p>
-          </div>
-        </Card>
+        <CreateEmailCard
+          maxPickerSelect={MAX_PICKER_SELECT}
+          intentPresets={INTENT_PRESETS}
+          pickerSearch={pickerSearch}
+          pickerListingType={pickerListingType}
+          pickerLoading={pickerLoading}
+          pickerItems={pickerItems}
+          pickerTotal={pickerTotal}
+          pickerOffset={pickerOffset}
+          selectedInventoryIds={selectedInventoryIds}
+          styleGuides={styleGuides}
+          selectedGuideIds={selectedGuideIds}
+          filterListingTypes={filterListingTypes}
+          filterLimit={filterLimit}
+          intent={intent}
+          generating={generating}
+          onPickerSearchChange={setPickerSearch}
+          onPickerSearchEnter={() => fetchInventoryForPicker({ search: pickerSearch })}
+          onPickerListingTypeChange={setPickerListingType}
+          onLoadProducts={() => fetchInventoryForPicker()}
+          onQuickFill={quickFillFromFilter}
+          onClearPickerSelection={clearPickerSelection}
+          onTogglePickerProduct={togglePickerProduct}
+          onPrevPickerPage={() => fetchInventoryForPicker({ offset: Math.max(0, pickerOffset - 20) })}
+          onNextPickerPage={() => fetchInventoryForPicker({ offset: pickerOffset + 20 })}
+          onSelectedGuideChange={handleSelectedGuideChange}
+          onToggleFilterListingType={handleToggleFilterListingType}
+          onFilterLimitChange={setFilterLimit}
+          onIntentChange={setIntent}
+          onGenerate={handleGenerate}
+        />
+
+        <EmailPreviewCard
+          preview={preview}
+          safePreviewHtml={safePreviewHtml}
+          previewTab={previewTab}
+          editableKeyText={editableKeyText}
+          pushing={pushing}
+          createCampaign={createCampaign}
+          onPreviewTabChange={handlePreviewTabChange}
+          onSubjectChange={handlePreviewSubjectChange}
+          onPreheaderChange={handlePreviewPreheaderChange}
+          onHeadlineChange={handleHeadlineChange}
+          onBodyChange={handleBodyChange}
+          onCtaChange={handleCtaChange}
+          onHtmlChange={handlePreviewHtmlChange}
+          onCopy={() => handleCopy(preview)}
+          onPush={() => handlePush(preview)}
+          onCreateCampaignChange={setCreateCampaign}
+        />
       </div>
+
+      <StyleGuidePreviewModal
+        guide={previewGuide}
+        safeHtml={safeGuideHtml}
+        onClose={() => setPreviewGuide(null)}
+      />
+
+      <EditSectionsModal
+        guide={editGuide}
+        layoutNotes={editLayoutNotes}
+        sectionTags={editSectionTags}
+        saving={savingNotes}
+        onLayoutNotesChange={setEditLayoutNotes}
+        onAddSectionTag={addSectionTag}
+        onUpdateSectionTag={updateSectionTag}
+        onRemoveSectionTag={removeSectionTag}
+        onClose={() => setEditGuide(null)}
+        onSave={saveLayoutNotes}
+      />
+
+      <ImportFromKlaviyoModal
+        open={importModalOpen}
+        templates={templates}
+        campaigns={campaigns}
+        campaignMessagesCache={campaignMessagesCache}
+        selectedTemplateIds={selectedTemplateIds}
+        selectedCampaignMessages={selectedCampaignMessages}
+        loadingMessages={loadingMessages}
+        exporting={exporting}
+        onClose={() => setImportModalOpen(false)}
+        onToggleTemplate={toggleTemplate}
+        onToggleCampaignMessage={toggleCampaignMessage}
+        onSelectAllTemplates={selectAllTemplates}
+        onClearTemplates={clearTemplates}
+        onSelectAllMessages={selectAllMessages}
+        onClearMessages={clearMessages}
+        onSelectCampaignMessages={selectCampaignMessages}
+        onDeselectCampaignMessages={deselectCampaignMessages}
+        onExportSelected={handleExportSelected}
+      />
     </Shell>
   );
 }

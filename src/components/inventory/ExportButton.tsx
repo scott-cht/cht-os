@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
 import { 
   exportInventory, 
@@ -18,7 +18,7 @@ interface ExportButtonProps {
   /** Whether export is disabled */
   disabled?: boolean;
   /** Button variant */
-  variant?: 'default' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost';
   /** Button size */
   size?: 'sm' | 'md' | 'lg';
   /** Show dropdown with export options */
@@ -44,6 +44,45 @@ export function ExportButton({
 }: ExportButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Keyboard navigation for dropdown
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+        return;
+      }
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const buttons = dropdownRef.current?.querySelectorAll<HTMLButtonElement>(
+          'button[role="menuitem"]'
+        );
+        if (!buttons?.length) return;
+
+        const currentIndex = Array.from(buttons).findIndex(
+          btn => btn === document.activeElement
+        );
+
+        let nextIndex: number;
+        if (e.key === 'ArrowDown') {
+          nextIndex = currentIndex < buttons.length - 1 ? currentIndex + 1 : 0;
+        } else {
+          nextIndex = currentIndex > 0 ? currentIndex - 1 : buttons.length - 1;
+        }
+
+        buttons[nextIndex]?.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   const handleExport = (type: ExportType) => {
     if (items.length === 0) {
@@ -105,20 +144,24 @@ export function ExportButton({
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <Button
+        ref={buttonRef}
         variant={variant}
         size={size}
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled || items.length === 0}
         isLoading={isExporting}
         className={className}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={`Export ${items.length} inventory items`}
       >
-        <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
         Export
-        <svg className={`w-4 h-4 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-4 h-4 ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </Button>
@@ -129,20 +172,26 @@ export function ExportButton({
           <div 
             className="fixed inset-0 z-10" 
             onClick={() => setIsOpen(false)}
+            aria-hidden="true"
           />
           
           {/* Dropdown */}
-          <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-800 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 z-20">
+          <div 
+            className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-800 rounded-lg shadow-lg border border-zinc-200 dark:border-zinc-700 z-20"
+            role="menu"
+            aria-label="Export options"
+          >
             <div className="p-2">
-              <p className="px-3 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <p className="px-3 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400" id="export-label">
                 Export {items.length} item{items.length !== 1 ? 's' : ''} as:
               </p>
               
               <button
+                role="menuitem"
                 onClick={() => handleExport('full')}
                 className="w-full px-3 py-2 text-left text-sm rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
               >
-                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <div>
@@ -152,10 +201,11 @@ export function ExportButton({
               </button>
               
               <button
+                role="menuitem"
                 onClick={() => handleExport('compact')}
                 className="w-full px-3 py-2 text-left text-sm rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
               >
-                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                 </svg>
                 <div>
@@ -165,10 +215,11 @@ export function ExportButton({
               </button>
               
               <button
+                role="menuitem"
                 onClick={() => handleExport('accounting')}
                 className="w-full px-3 py-2 text-left text-sm rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
               >
-                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>

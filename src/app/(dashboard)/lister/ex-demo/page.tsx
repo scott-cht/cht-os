@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -54,7 +55,7 @@ export default function RegisterDemoPage() {
       }
 
       setStep('details');
-    } catch (err) {
+    } catch {
       setError('Failed to identify product');
       notify.error('Identification failed', 'Please enter details manually');
       setStep('details');
@@ -112,7 +113,7 @@ export default function RegisterDemoPage() {
         notify.success('Demo registered', `${brand} ${model} added to demo inventory`);
         router.push('/demo-inventory?registered=true');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to register demo unit');
       notify.error('Registration failed', 'Failed to register demo unit');
     } finally {
@@ -225,10 +226,12 @@ export default function RegisterDemoPage() {
           {/* Captured Images Preview */}
           {capturedImages.length > 0 && (
             <Card className="mb-6 p-0 overflow-hidden">
+              { }
               <img src={capturedImages[0]} alt="Demo Unit" className="w-full h-48 object-cover" />
               {capturedImages.length > 1 && (
                 <div className="p-2 bg-zinc-100 dark:bg-zinc-800 flex gap-2 overflow-x-auto">
                   {capturedImages.map((img, idx) => (
+                     
                     <img 
                       key={idx} 
                       src={img} 
@@ -372,6 +375,7 @@ export default function RegisterDemoPage() {
 
             {capturedImages.length > 0 && (
               <div className="mb-6">
+                { }
                 <img src={capturedImages[0]} alt="Demo Unit" className="w-full h-48 object-cover rounded-lg" />
                 {capturedImages.length > 1 && (
                   <p className="text-xs text-zinc-500 text-center mt-2">

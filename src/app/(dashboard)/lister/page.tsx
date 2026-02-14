@@ -121,6 +121,43 @@ export default function ListerChoicePage() {
               </svg>
             </div>
           </Link>
+
+          {/* Bulk Import from Pricelist */}
+          <Link
+            href="/lister/pricelist"
+            className="group p-6 bg-white dark:bg-zinc-900 rounded-xl border-2 border-zinc-200 dark:border-zinc-800 hover:border-amber-500 dark:hover:border-amber-500 transition-all hover:shadow-lg"
+          >
+            <div className="flex items-start gap-5">
+              <div className="w-16 h-16 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">
+                📋
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xl font-semibold text-zinc-900 dark:text-white group-hover:text-amber-600 transition-colors">
+                  Bulk Import from Pricelist
+                </h3>
+                <p className="text-zinc-600 dark:text-zinc-400 mt-1 mb-3">
+                  Upload a supplier PDF pricelist. AI extracts product codes, names, and prices. Then enrich items individually.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-2 py-1 text-xs rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                    PDF Upload
+                  </span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                    AI Extraction
+                  </span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                    Bulk Import
+                  </span>
+                  <span className="px-2 py-1 text-xs rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                    Enrich Later
+                  </span>
+                </div>
+              </div>
+              <svg className="w-6 h-6 text-zinc-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </Link>
         </div>
 
         {/* Recent tip */}

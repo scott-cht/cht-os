@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 interface SyncStatusData {
@@ -21,6 +22,13 @@ const COLORS = {
 };
 
 export function SyncStatusChart({ data }: SyncStatusChartProps) {
+  const [canRenderChart, setCanRenderChart] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setCanRenderChart(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   if (!data || data.length === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
@@ -40,46 +48,61 @@ export function SyncStatusChart({ data }: SyncStatusChartProps) {
 
   const totalItems = chartData.reduce((sum, item) => sum + item.value, 0);
 
+  // Generate accessible description for screen readers
+  const accessibleDescription = chartData
+    .map(item => `${item.name}: ${item.value} items (${((item.value / totalItems) * 100).toFixed(0)}%)`)
+    .join(', ');
+
   return (
-    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6">
-      <h3 className="text-sm font-medium text-zinc-500 mb-4">Sync Status</h3>
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={90}
-              paddingAngle={2}
-              dataKey="value"
-              label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-              labelLine={false}
-            >
-              {chartData.map((entry, index) => (
-                <Cell 
-                  key={`cell-${index}`} 
-                  fill={COLORS[entry.status as keyof typeof COLORS] || COLORS.default}
-                />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(value: number) => [`${value} items`, 'Count']}
-              contentStyle={{
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                border: 'none',
-                borderRadius: '8px',
-                color: '#fff',
-              }}
-            />
-            <Legend
-              verticalAlign="bottom"
-              height={36}
-              formatter={(value) => <span className="text-sm text-zinc-600 dark:text-zinc-400">{String(value)}</span>}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+    <div 
+      className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-6"
+      role="figure"
+      aria-labelledby="sync-status-chart-title"
+    >
+      <h3 id="sync-status-chart-title" className="text-sm font-medium text-zinc-500 mb-4">Sync Status</h3>
+      <div 
+        className="h-64"
+        role="img"
+        aria-label={`Sync status pie chart showing ${totalItems} total items: ${accessibleDescription}`}
+      >
+        {canRenderChart ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={90}
+                paddingAngle={2}
+                dataKey="value"
+                label={({ percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`}
+                labelLine={false}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={COLORS[entry.status as keyof typeof COLORS] || COLORS.default}
+                  />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value) => [`${value} items`, 'Count']}
+                contentStyle={{
+                  backgroundColor: 'rgba(0,0,0,0.8)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                }}
+              />
+              <Legend
+                verticalAlign="bottom"
+                height={36}
+                formatter={(value) => <span className="text-sm text-zinc-600 dark:text-zinc-400">{String(value)}</span>}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : null}
       </div>
       <div className="mt-2 text-center text-sm text-zinc-500">
         Total: {totalItems} items

@@ -1,7 +1,8 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Shell } from '@/components/shell';
 import { Card } from '@/components/ui/Card';
@@ -23,7 +24,6 @@ function getAlertLevel(daysOnDemo: number): 'ok' | 'warning' | 'critical' {
 }
 
 function DemoInventoryContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const justRegistered = searchParams.get('registered') === 'true';
   
@@ -293,6 +293,7 @@ function DemoInventoryContent() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             {item.registration_images?.[0] ? (
+                               
                               <img 
                                 src={item.registration_images[0]} 
                                 alt={item.model}

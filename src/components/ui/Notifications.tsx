@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNotifications, useAppStore, type Notification } from '@/lib/store/app-store';
 import { cn } from '@/lib/utils/cn';
 
@@ -45,13 +45,25 @@ function NotificationItem({ notification }: { notification: Notification }) {
   const dismissNotification = useAppStore((state) => state.dismissNotification);
   const styles = notificationStyles[notification.type];
   const iconColor = iconColors[notification.type];
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleDismiss = () => {
     setIsExiting(true);
-    setTimeout(() => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+    }
+    dismissTimerRef.current = setTimeout(() => {
       dismissNotification(notification.id);
     }, 200);
   };
+
+  useEffect(() => {
+    return () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div

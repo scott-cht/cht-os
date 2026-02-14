@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { uuidSchema } from '@/lib/validation/schemas';
+
+// UUID validation helper
+function validateUUID(id: string): boolean {
+  return uuidSchema.safeParse(id).success;
+}
 
 /**
  * Get a single product by ID
@@ -12,6 +18,15 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+
+    // Validate UUID format before querying
+    if (!validateUUID(id)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format. Expected a valid UUID.' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServerClient();
 
     const { data, error } = await supabase
@@ -52,6 +67,15 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+
+    // Validate UUID format before querying
+    if (!validateUUID(id)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format. Expected a valid UUID.' },
+        { status: 400 }
+      );
+    }
+
     const updates = await request.json();
     const supabase = createServerClient();
 
@@ -89,6 +113,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // Validate UUID format before querying
+    if (!validateUUID(id)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format. Expected a valid UUID.' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServerClient();
 
     // Soft delete by setting archived flag

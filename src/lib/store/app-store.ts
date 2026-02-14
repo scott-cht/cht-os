@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, devtools } from 'zustand/middleware';
 
 /**
  * Global Application Store
@@ -72,10 +71,7 @@ const defaultPreferences: UserPreferences = {
 // Generate unique notification ID
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-export const useAppStore = create<AppState>()(
-  devtools(
-    persist(
-      (set, get) => ({
+export const useAppStore = create<AppState>()((set, get) => ({
         // Notifications
         notifications: [],
         
@@ -206,16 +202,7 @@ export const useAppStore = create<AppState>()(
         clearSyncing: () => {
           set({ syncingItems: new Set() });
         },
-      }),
-      {
-        name: 'product-lister-storage',
-        // Only persist preferences (not notifications, selection, or sync status)
-        partialize: (state) => ({ preferences: state.preferences }),
-      }
-    ),
-    { name: 'AppStore' }
-  )
-);
+      }));
 
 // Selectors for performance optimization
 export const useNotifications = () => useAppStore((state) => state.notifications);

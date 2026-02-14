@@ -46,17 +46,52 @@ export function ConfirmDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Focus trap and escape key handling
+  // Focus trap and keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
 
     // Focus the cancel button when dialog opens
     cancelButtonRef.current?.focus();
 
-    // Handle escape key
+    // Get all focusable elements in the dialog
+    const getFocusableElements = () => {
+      if (!dialogRef.current) return [];
+      return Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+    };
+
+    // Handle keyboard navigation
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape key closes dialog
       if (e.key === 'Escape' && !isLoading) {
         onClose();
+        return;
+      }
+
+      // Tab key for focus trapping
+      if (e.key === 'Tab') {
+        const focusableElements = getFocusableElements();
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          // Shift + Tab - go to previous element
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          // Tab - go to next element
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     };
 

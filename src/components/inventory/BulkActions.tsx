@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils/cn';
+import { notify } from '@/lib/store/app-store';
 
 interface BulkActionsProps {
   selectedIds: string[];
@@ -38,13 +39,20 @@ export function BulkActions({ selectedIds, onClearSelection, onActionComplete }:
         throw new Error(result.error || 'Action failed');
       }
 
-      // Show success message
-      alert(`${actionType} completed: ${result.successCount || result.updated || result.count} items`);
+      // Show success notification
+      const count = result.successCount || result.updated || result.count;
+      notify.success(
+        `${actionType.charAt(0).toUpperCase() + actionType.slice(1)} Complete`,
+        `Successfully processed ${count} item${count > 1 ? 's' : ''}`
+      );
       
       onActionComplete();
       onClearSelection();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Action failed');
+      notify.error(
+        'Action Failed',
+        error instanceof Error ? error.message : 'An unexpected error occurred'
+      );
     } finally {
       setIsLoading(false);
       setAction(null);

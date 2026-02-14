@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { publishProduct } from '@/lib/sync/publish';
 import { createSyncChannel, SyncBroadcaster } from '@/lib/realtime/sync-channel';
-import { logBulkOperation, logSync } from '@/lib/audit/logger';
+import { logBulkOperation } from '@/lib/audit/logger';
 import { bulkOperationSchema, ValidationError, validateBody } from '@/lib/validation/schemas';
+import { rateLimiters, checkRateLimit } from '@/lib/utils/rate-limiter';
 import type { InventoryItem } from '@/types';
 
 /**
@@ -47,6 +48,16 @@ type BulkRequest = BulkSyncRequest | BulkPriceUpdateRequest | BulkArchiveRequest
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting - stricter for expensive bulk operations
+    const clientIp = request.headers.get('x-forwarded-for') || 'anonymous';
+    const rateCheck = checkRateLimit(rateLimiters.bulk, clientIp);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', retryAfter: rateCheck.retryAfter },
+        { status: 429 }
+      );
+    }
+
     const rawBody = await request.json();
 
     // Validate with Zod schema
@@ -188,13 +199,12 @@ async function handleBulkSync(
   const errorCount = Object.values(results).filter(r => !r.success).length;
 
   // Log bulk sync operation
-  await logBulkOperation({
-    action: 'sync',
+  await logBulkOperation(
+    'sync',
     itemIds,
-    successCount,
-    errorCount,
-    metadata: { results },
-  });
+    { success: successCount, failed: errorCount },
+    { results }
+  );
 
   return NextResponse.json({
     success: errorCount === 0,
@@ -256,13 +266,12 @@ async function handleBulkPriceUpdate(
     const updatedCount = updates.filter(u => u.sale_price !== null).length;
     
     // Log bulk price update
-    await logBulkOperation({
-      action: 'price_update',
-      itemIds: updates.filter(u => u.sale_price !== null).map(u => u.id),
-      successCount: updatedCount,
-      errorCount: 0,
-      metadata: { discountPercent },
-    });
+    await logBulkOperation(
+      'price_update',
+      updates.filter(u => u.sale_price !== null).map(u => u.id),
+      { success: updatedCount, failed: 0 },
+      { discountPercent }
+    );
 
     return NextResponse.json({
       success: true,
@@ -285,13 +294,12 @@ async function handleBulkPriceUpdate(
   }
 
   // Log bulk price update
-  await logBulkOperation({
-    action: 'price_update',
+  await logBulkOperation(
+    'price_update',
     itemIds,
-    successCount: itemIds.length,
-    errorCount: 0,
-    metadata: { fixedPrice },
-  });
+    { success: itemIds.length, failed: 0 },
+    { fixedPrice }
+  );
 
   return NextResponse.json({
     success: true,
@@ -309,7 +317,7 @@ async function handleBulkArchive(
 ) {
   const { error: updateError } = await supabase
     .from('inventory_items')
-    .update({ archived: archive })
+    .update({ is_archived: archive })
     .in('id', itemIds);
 
   if (updateError) {
@@ -320,12 +328,11 @@ async function handleBulkArchive(
   }
 
   // Log bulk archive operation
-  await logBulkOperation({
-    action: archive ? 'archive' : 'unarchive',
+  await logBulkOperation(
+    archive ? 'archive' : 'unarchive',
     itemIds,
-    successCount: itemIds.length,
-    errorCount: 0,
-  });
+    { success: itemIds.length, failed: 0 }
+  );
 
   return NextResponse.json({
     success: true,
@@ -365,13 +372,12 @@ async function handleBulkStatusUpdate(
   }
 
   // Log bulk status update
-  await logBulkOperation({
-    action: 'status_update',
+  await logBulkOperation(
+    'status_update',
     itemIds,
-    successCount: itemIds.length,
-    errorCount: 0,
-    metadata: { listingStatus },
-  });
+    { success: itemIds.length, failed: 0 },
+    { listingStatus }
+  );
 
   return NextResponse.json({
     success: true,

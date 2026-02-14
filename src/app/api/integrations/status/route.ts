@@ -56,6 +56,9 @@ export async function GET() {
     process.env.NOTION_INVENTORY_DATABASE_ID
   );
 
+  // Check Klaviyo configuration (Phase 2 - Email Studio)
+  const klaviyoConfigured = !!process.env.KLAVIYO_PRIVATE_API_KEY;
+
   return NextResponse.json({
     shopify: {
       configured: shopifyConfigured,
@@ -69,6 +72,10 @@ export async function GET() {
     notion: {
       configured: notionConfigured,
       status: notionConfigured ? 'ready' : 'not_configured',
+    },
+    klaviyo: {
+      configured: klaviyoConfigured,
+      status: klaviyoConfigured ? 'ready' : 'not_configured',
     },
   });
 }

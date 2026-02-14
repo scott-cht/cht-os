@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useCallback, useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { PricingCalculator } from '@/components/products/PricingCalculator';
 import { SpecificationsEditor, SpecificationsDisplay } from '@/components/products/SpecificationsEditor';
@@ -56,12 +55,7 @@ export default function ProductPage({ params }: ProductPageProps) {
   const [deletedImages, setDeletedImages] = useState<Set<number>>(new Set());
   const [showPreview, setShowPreview] = useState(false);
 
-  useEffect(() => {
-    fetchProduct();
-    checkShopifyConfig();
-  }, [id]);
-
-  const checkShopifyConfig = async () => {
+  const checkShopifyConfig = useCallback(async () => {
     try {
       const response = await fetch('/api/shopify');
       const data = await response.json();
@@ -69,9 +63,9 @@ export default function ProductPage({ params }: ProductPageProps) {
     } catch {
       setIsShopifyConfigured(false);
     }
-  };
+  }, []);
 
-  const fetchProduct = async () => {
+  const fetchProduct = useCallback(async () => {
     try {
       const response = await fetch(`/api/products/${id}`);
       const data = await response.json();
@@ -86,7 +80,12 @@ export default function ProductPage({ params }: ProductPageProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchProduct();
+    checkShopifyConfig();
+  }, [fetchProduct, checkShopifyConfig]);
 
   const handleScrape = async () => {
     setIsScraping(true);
@@ -160,7 +159,7 @@ export default function ProductPage({ params }: ProductPageProps) {
     }
   };
 
-  const handleSavePricing = async (costPrice: number, salesPrice: number, discountPercent: number) => {
+  const handleSavePricing = async (costPrice: number, salesPrice: number) => {
     setIsSavingPricing(true);
     setError(null);
 
@@ -623,6 +622,7 @@ export default function ProductPage({ params }: ProductPageProps) {
                         deletedImages.has(index) ? 'opacity-40 ring-2 ring-red-500' : ''
                       }`}
                     >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={src}
                         alt={`Product image ${index + 1}`}
@@ -660,7 +660,7 @@ export default function ProductPage({ params }: ProductPageProps) {
                   ))}
                 </div>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
-                  Hover over images and click the X to remove unwanted images. Changes are saved when you click "Save Changes".
+                  Hover over images and click the X to remove unwanted images. Changes are saved when you click &quot;Save Changes&quot;.
                 </p>
               </section>
             )}
@@ -1052,6 +1052,7 @@ export default function ProductPage({ params }: ProductPageProps) {
                       {rawData.processedImages.map((img, index) => (
                         <div key={index} className="space-y-2">
                           <div className="aspect-square rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={img.publicUrl}
                               alt={img.altText}

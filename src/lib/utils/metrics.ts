@@ -259,7 +259,7 @@ export function normalizeDimensions(text: string): NormalizedDimensions | null {
   }
   
   // Parse each dimension
-  const dimensions = parts.map((part, i) => {
+  const dimensions = parts.map((part) => {
     // Add unit if not present
     if (!part.match(/[a-zA-Z'"]+$/) && unit) {
       part = part.trim() + ' ' + unit;

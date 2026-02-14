@@ -12,6 +12,7 @@ These tests target live API routes and require a running app.
    - `RUN_KLAVIYO_SENDER_VALIDATION_TESTS=true` (optional; use when sender defaults are intentionally unset to verify validation)
    - `RUN_RMA_INTEGRATION_TESTS=true` (to run Phase 4 RMA lifecycle and registry tests)
    - `RUN_RMA_AI_TESTS=true` (optional; enables RMA AI recommendation test and requires `ANTHROPIC_API_KEY`)
+  - `SHOPIFY_API_SECRET` (required for returns webhook signature validation test)
    - `INTEGRATION_BASE_URL` (optional, defaults to `http://localhost:3000`)
    - `INTERNAL_API_KEY` (optional, if middleware API key auth is enabled)
    - `TEST_SHOPIFY_PRODUCT_ID` (required for sync-route idempotency test)
@@ -30,6 +31,6 @@ npm run test:integration
 - Sender-config validation test is additionally skipped unless `RUN_KLAVIYO_SENDER_VALIDATION_TESTS=true`.
 - RMA Phase 4 tests are additionally skipped unless `RUN_RMA_INTEGRATION_TESTS=true`.
 - RMA AI recommendation test is additionally skipped unless `RUN_RMA_AI_TESTS=true`.
-- Phase 4 success paths require the `015_rma_and_serial_registry.sql` migration to be applied in your target Supabase project.
+- Phase 4 success paths require the `015_rma_and_serial_registry.sql`, `016_rma_sources_and_dedupe.sql`, `017_rma_ops_enrichment.sql`, `018_rma_assignment_fields.sql`, and `019_rma_communications.sql` migrations to be applied in your target Supabase project.
 - These are real integration tests (no mocks), so they depend on configured services.
-- The suite includes idempotency coverage, Klaviyo behavior tests, and Phase 4 RMA lifecycle coverage.
+- The suite includes idempotency coverage, Klaviyo behavior tests, and Phase 4/rollout RMA coverage (manual + webhook + public intake validation), including warranty/tracking/communications/KPI/time-in-stage/logistics-exceptions endpoint checks.

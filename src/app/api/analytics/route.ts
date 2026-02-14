@@ -39,15 +39,20 @@ export interface AnalyticsData {
   }[];
 }
 
+// Maximum items to process for analytics to prevent memory issues
+const MAX_ANALYTICS_ITEMS = 10000;
+
 export async function GET() {
   try {
     const supabase = createServerClient();
 
-    // Fetch all inventory items
-    const { data: items, error } = await supabase
+    // Fetch inventory items with only needed columns for analytics
+    // Limited to prevent memory issues with very large datasets
+    const { data: items, error, count } = await supabase
       .from('inventory_items')
-      .select('*')
-      .eq('is_archived', false);
+      .select('listing_type, sale_price, cost_price, sync_status, condition_grade, created_at', { count: 'exact' })
+      .eq('is_archived', false)
+      .limit(MAX_ANALYTICS_ITEMS);
 
     if (error) {
       return NextResponse.json(
@@ -99,21 +104,21 @@ export async function GET() {
       trade_in: 'Trade-In',
       ex_demo: 'Ex-Demo',
     };
-    const byListingType = Object.entries(
-      items.reduce((acc, item) => {
-        const type = item.listing_type || 'unknown';
-        if (!acc[type]) {
-          acc[type] = { count: 0, value: 0 };
-        }
-        acc[type].count++;
-        acc[type].value += item.sale_price || 0;
-        return acc;
-      }, {} as Record<string, { count: number; value: number }>)
-    ).map(([type, data]) => ({
+    const listingTypeData = items.reduce((acc, item) => {
+      const type = item.listing_type || 'unknown';
+      if (!acc[type]) {
+        acc[type] = { count: 0, value: 0 };
+      }
+      acc[type].count++;
+      acc[type].value += item.sale_price || 0;
+      return acc;
+    }, {} as Record<string, { count: number; value: number }>);
+    
+    const byListingType = Object.keys(listingTypeData).map((type) => ({
       type,
       label: typeLabels[type] || type,
-      count: data.count,
-      value: data.value,
+      count: listingTypeData[type].count,
+      value: listingTypeData[type].value,
     }));
 
     // Group by sync status
@@ -123,16 +128,16 @@ export async function GET() {
       syncing: 'Syncing',
       error: 'Error',
     };
-    const bySyncStatus = Object.entries(
-      items.reduce((acc, item) => {
-        const status = item.sync_status || 'unknown';
-        acc[status] = (acc[status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    ).map(([status, count]) => ({
+    const syncStatusData = items.reduce((acc, item) => {
+      const status = item.sync_status || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const bySyncStatus = Object.keys(syncStatusData).map((status) => ({
       status,
       label: statusLabels[status] || status,
-      count,
+      count: syncStatusData[status],
     }));
 
     // Group by condition grade
@@ -143,18 +148,18 @@ export async function GET() {
       fair: 'Fair',
       poor: 'Poor',
     };
-    const byCondition = Object.entries(
-      items.reduce((acc, item) => {
-        const grade = item.condition_grade || 'not_graded';
-        acc[grade] = (acc[grade] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
-    )
-      .filter(([grade]) => grade !== 'not_graded')
-      .map(([grade, count]) => ({
+    const conditionData = items.reduce((acc, item) => {
+      const grade = item.condition_grade || 'not_graded';
+      acc[grade] = (acc[grade] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const byCondition = Object.keys(conditionData)
+      .filter((grade) => grade !== 'not_graded')
+      .map((grade) => ({
         grade,
         label: gradeLabels[grade] || grade,
-        count,
+        count: conditionData[grade],
       }));
 
     // Timeline - last 30 days
@@ -208,7 +213,18 @@ export async function GET() {
       timeline,
     };
 
-    return NextResponse.json(analytics);
+    // Include metadata about data limits
+    const response = {
+      ...analytics,
+      meta: {
+        processedItems: items.length,
+        totalInDatabase: count || items.length,
+        isTruncated: (count || 0) > MAX_ANALYTICS_ITEMS,
+        maxItems: MAX_ANALYTICS_ITEMS,
+      },
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Analytics error:', error);
     return NextResponse.json(

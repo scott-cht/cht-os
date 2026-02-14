@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
@@ -57,6 +58,7 @@ export function LabelPreview({ item, template, content, baseUrl = '' }: LabelPre
       {isSmallLabel && (
         <div className="flex items-center justify-between h-full">
           {content.showQrCode && qrDataUrl && (
+             
             <img 
               src={qrDataUrl} 
               alt="QR Code"
@@ -83,6 +85,7 @@ export function LabelPreview({ item, template, content, baseUrl = '' }: LabelPre
         <div className="flex h-full">
           {content.showQrCode && qrDataUrl && (
             <div className="flex-shrink-0 mr-2">
+              { }
               <img 
                 src={qrDataUrl} 
                 alt="QR Code"
@@ -137,6 +140,7 @@ export function LabelPreview({ item, template, content, baseUrl = '' }: LabelPre
           <div className="flex items-start">
             {content.showQrCode && qrDataUrl && (
               <div className="flex-shrink-0 mr-3">
+                { }
                 <img 
                   src={qrDataUrl} 
                   alt="QR Code"

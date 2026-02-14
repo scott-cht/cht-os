@@ -27,7 +27,6 @@ interface PriceTrends {
 
 interface PriceHistoryProps {
   itemId: string;
-  currentPrice?: number | null;
 }
 
 /**
@@ -35,7 +34,7 @@ interface PriceHistoryProps {
  * 
  * Displays price change history for an inventory item.
  */
-export function PriceHistory({ itemId, currentPrice }: PriceHistoryProps) {
+export function PriceHistory({ itemId }: PriceHistoryProps) {
   const [history, setHistory] = useState<PriceHistoryEntry[]>([]);
   const [trends, setTrends] = useState<PriceTrends | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +53,7 @@ export function PriceHistory({ itemId, currentPrice }: PriceHistoryProps) {
           setHistory(data.history || []);
           setTrends(data.trends || null);
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load price history');
       } finally {
         setIsLoading(false);

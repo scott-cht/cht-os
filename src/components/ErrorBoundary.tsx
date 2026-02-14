@@ -1,6 +1,7 @@
 'use client';
 
 import { Component, ErrorInfo, ReactNode } from 'react';
+import Link from 'next/link';
 
 interface Props {
   children: ReactNode;
@@ -100,12 +101,12 @@ export function PageErrorBoundary({ children }: { children: ReactNode }) {
               >
                 Refresh page
               </button>
-              <a
+              <Link
                 href="/"
                 className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors font-medium"
               >
                 Go to dashboard
-              </a>
+              </Link>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { uuidSchema } from '@/lib/validation/schemas';
 import type { InventoryItemUpdate } from '@/types';
 
 /**
@@ -10,12 +11,26 @@ import type { InventoryItemUpdate } from '@/types';
  * DELETE /api/inventory/[id] - Archive item
  */
 
+// UUID validation helper
+function validateUUID(id: string): boolean {
+  return uuidSchema.safeParse(id).success;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    // Validate UUID format before querying
+    if (!validateUUID(id)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format. Expected a valid UUID.' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServerClient();
 
     const { data: item, error: fetchError } = await supabase
@@ -51,6 +66,15 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+
+    // Validate UUID format before querying
+    if (!validateUUID(id)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format. Expected a valid UUID.' },
+        { status: 400 }
+      );
+    }
+
     const body: InventoryItemUpdate = await request.json();
 
     const supabase = createServerClient();
@@ -92,6 +116,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    // Validate UUID format before querying
+    if (!validateUUID(id)) {
+      return NextResponse.json(
+        { error: 'Invalid ID format. Expected a valid UUID.' },
+        { status: 400 }
+      );
+    }
+
     const supabase = createServerClient();
 
     // Soft delete by setting is_archived = true

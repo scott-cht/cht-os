@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -22,33 +22,31 @@ export function PricingCalculator({
   isSaving,
 }: PricingCalculatorProps) {
   const [costPrice, setCostPrice] = useState<string>(initialCostPrice?.toString() || '');
-  const [discountPercent, setDiscountPercent] = useState<string>('0');
-  const [pricing, setPricing] = useState<ReturnType<typeof calculatePricing> | null>(null);
+  const [discountPercent, setDiscountPercent] = useState<string>('');
 
-  // Calculate initial discount from existing prices
-  useEffect(() => {
+  const initialDiscountPercent = useMemo(() => {
     if (rrpAud && initialSalesPrice) {
       const calculatedDiscount = ((rrpAud - initialSalesPrice) / rrpAud) * 100;
-      setDiscountPercent(Math.round(calculatedDiscount).toString());
+      return Math.round(calculatedDiscount).toString();
     }
+    return '0';
   }, [rrpAud, initialSalesPrice]);
 
-  // Recalculate pricing when inputs change
-  useEffect(() => {
-    if (rrpAud) {
-      const cost = parseFloat(costPrice) || 0;
-      const discount = parseFloat(discountPercent) || 0;
-      const result = calculatePricing(rrpAud, discount, cost);
-      setPricing(result);
-    }
-  }, [rrpAud, costPrice, discountPercent]);
+  const activeDiscountPercent = discountPercent === '' ? initialDiscountPercent : discountPercent;
+
+  const pricing = useMemo(() => {
+    if (!rrpAud) return null;
+    const cost = parseFloat(costPrice) || 0;
+    const discount = parseFloat(activeDiscountPercent) || 0;
+    return calculatePricing(rrpAud, discount, cost);
+  }, [rrpAud, costPrice, activeDiscountPercent]);
 
   const handleSave = async () => {
     if (pricing) {
       await onSave(
         parseFloat(costPrice) || 0,
         pricing.salesPrice,
-        parseFloat(discountPercent) || 0
+        parseFloat(activeDiscountPercent) || 0
       );
     }
   };
@@ -113,7 +111,7 @@ export function PricingCalculator({
             max="100"
             step="1"
             placeholder="e.g., 15"
-            value={discountPercent}
+            value={activeDiscountPercent}
             onChange={(e) => setDiscountPercent(e.target.value)}
           />
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -125,14 +123,14 @@ export function PricingCalculator({
       {/* Discount Slider */}
       <div>
         <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-          Quick Discount: {discountPercent}%
+          Quick Discount: {activeDiscountPercent}%
         </label>
         <input
           type="range"
           min="0"
           max="50"
           step="5"
-          value={discountPercent}
+          value={activeDiscountPercent}
           onChange={(e) => setDiscountPercent(e.target.value)}
           className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
         />

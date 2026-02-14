@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { processProductImagesHybrid } from '@/lib/images/edge-processor';
-import type { ProcessedImage } from '@/types';
 
 /**
  * Image Processing endpoint

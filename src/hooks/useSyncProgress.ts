@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 import type { SyncProgressEvent } from '@/lib/realtime/sync-channel';
 
@@ -37,7 +37,7 @@ export function useSyncProgress(
   options: UseSyncProgressOptions = {}
 ) {
   const [state, setState] = useState<SyncProgressState>(initialState);
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
+  const { onComplete, onError } = options;
 
   // Subscribe to sync channel
   useEffect(() => {
@@ -88,14 +88,14 @@ export function useSyncProgress(
               newState.progress = 100;
               newState.message = event.message;
               newState.currentPlatform = undefined;
-              options.onComplete?.(event.result?.success ?? true);
+              onComplete?.(event.result?.success ?? true);
               break;
 
             case 'sync:error':
               newState.isActive = false;
               newState.error = event.result?.error || event.message;
               newState.message = event.message;
-              options.onError?.(newState.error);
+              onError?.(newState.error);
               break;
           }
 
@@ -104,12 +104,10 @@ export function useSyncProgress(
       })
       .subscribe();
 
-    setChannel(syncChannel);
-
     return () => {
       syncChannel.unsubscribe();
     };
-  }, [itemId, options.onComplete, options.onError]);
+  }, [itemId, onComplete, onError]);
 
   // Reset state
   const reset = useCallback(() => {
@@ -127,6 +125,7 @@ export function useSyncProgress(
  */
 export function useBulkSyncProgress(itemIds: string[]) {
   const [progress, setProgress] = useState<Record<string, SyncProgressState>>({});
+  const itemIdsKey = useMemo(() => itemIds.join(','), [itemIds]);
 
   useEffect(() => {
     if (itemIds.length === 0) return;
@@ -168,7 +167,7 @@ export function useBulkSyncProgress(itemIds: string[]) {
     return () => {
       channels.forEach(ch => ch.unsubscribe());
     };
-  }, [itemIds.join(',')]);
+  }, [itemIds, itemIdsKey]);
 
   const totalProgress = itemIds.length > 0
     ? Object.values(progress).reduce((sum, p) => sum + (p.progress || 0), 0) / itemIds.length

@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
@@ -33,20 +34,6 @@ export function ProductPreview({
   const specifications = rawData?.htmlParsed?.specifications || {};
   const salesPrice = product.sales_price;
   const rrp = product.rrp_aud;
-
-  // Generate specs table HTML
-  const specsTableHtml = Object.keys(specifications).length > 0 
-    ? `<div class="specifications-section">
-        <h3>Technical Specifications</h3>
-        <table class="specifications-table">
-          <tbody>
-            ${Object.entries(specifications).map(([key, value]) => 
-              `<tr><th>${key}</th><td>${value}</td></tr>`
-            ).join('')}
-          </tbody>
-        </table>
-      </div>`
-    : '';
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -137,6 +124,7 @@ export function ProductPreview({
                 {images.length > 0 ? (
                   <div className="space-y-4">
                     <div className="aspect-square bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-hidden">
+                      { }
                       <img
                         src={images[0].publicUrl}
                         alt={images[0].altText}
@@ -147,6 +135,7 @@ export function ProductPreview({
                       <div className="grid grid-cols-4 gap-2">
                         {images.slice(0, 4).map((img, i) => (
                           <div key={i} className="aspect-square bg-zinc-100 dark:bg-zinc-800 rounded overflow-hidden">
+                            { }
                             <img
                               src={img.publicUrl}
                               alt={img.altText}

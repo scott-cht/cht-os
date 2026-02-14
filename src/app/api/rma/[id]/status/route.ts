@@ -14,6 +14,54 @@ import {
   upsertSerialRegistry,
 } from '@/lib/rma/service';
 import { syncRmaStatusToHubSpotTicket } from '@/lib/hubspot/tickets';
+import type { RmaStatus } from '@/types';
+
+const STATUS_ORDER: RmaStatus[] = [
+  'received',
+  'testing',
+  'sent_to_manufacturer',
+  'repaired_replaced',
+  'back_to_customer',
+];
+
+function validateTransition(currentStatus: RmaStatus, nextStatus: RmaStatus): string | null {
+  const currentIndex = STATUS_ORDER.indexOf(currentStatus);
+  const nextIndex = STATUS_ORDER.indexOf(nextStatus);
+  if (currentIndex === -1 || nextIndex === -1) return null;
+
+  if (nextIndex + 1 < currentIndex) {
+    return `Invalid transition from ${currentStatus} to ${nextStatus}. Move forward through workflow stages only.`;
+  }
+
+  if (nextStatus === 'repaired_replaced' && currentStatus === 'received') {
+    return 'Cannot move directly from received to repaired/replaced. Move to testing first.';
+  }
+
+  return null;
+}
+
+function requiredFieldsForStatus(nextStatus: RmaStatus, currentCase: Record<string, unknown>): string[] {
+  const required: string[] = [];
+  const asString = (key: string) => {
+    const value = currentCase[key];
+    return typeof value === 'string' ? value : null;
+  };
+
+  if (nextStatus === 'testing' && !asString('received_at')) {
+    required.push('received_at');
+  }
+
+  if ((nextStatus === 'sent_to_manufacturer' || nextStatus === 'repaired_replaced') && !asString('inspected_at')) {
+    required.push('inspected_at');
+  }
+
+  if (nextStatus === 'back_to_customer') {
+    if (!asString('outbound_carrier')) required.push('outbound_carrier');
+    if (!asString('outbound_tracking_number')) required.push('outbound_tracking_number');
+  }
+
+  return required;
+}
 
 /**
  * POST /api/rma/[id]/status
@@ -46,18 +94,68 @@ export async function POST(
       return NextResponse.json({ error: 'RMA case not found' }, { status: 404 });
     }
 
+    const transitionError = validateTransition(currentCase.status as RmaStatus, body.status);
+    if (transitionError) {
+      return NextResponse.json({ error: transitionError }, { status: 400 });
+    }
+
+    const missingFields = requiredFieldsForStatus(body.status, currentCase as Record<string, unknown>);
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Missing required fields before moving to ${body.status}.`,
+          missing_fields: missingFields,
+        },
+        { status: 400 }
+      );
+    }
+
     const updatePayload: Record<string, unknown> = {
       status: body.status,
-      ...(body.status === 'back_to_customer' ? { closed_at: new Date().toISOString() } : {}),
+      ...(body.status === 'received'
+        ? { received_at: currentCase.received_at || new Date().toISOString() }
+        : {}),
+      ...(body.status === 'testing' ? { inspected_at: currentCase.inspected_at || new Date().toISOString() } : {}),
+      ...(body.status === 'back_to_customer'
+        ? {
+            closed_at: new Date().toISOString(),
+            shipped_back_at: currentCase.shipped_back_at || new Date().toISOString(),
+          }
+        : {}),
     };
 
-    const { data: updatedCase, error: updateError } = await supabase
+    const updateResult = await supabase
       .from('rma_cases')
       .update(updatePayload)
       .eq('id', id)
       .select('*')
       .single();
+    let updatedCase = updateResult.data;
+    let updateError = updateResult.error;
     if (updateError || !updatedCase) {
+      const missingColumn = updateError?.message?.includes('column') && updateError?.message?.includes('rma_cases');
+      if (missingColumn) {
+        const fallbackPayload: Record<string, unknown> = {
+          status: body.status,
+          ...(body.status === 'back_to_customer' ? { closed_at: new Date().toISOString() } : {}),
+        };
+        const fallbackUpdate = await supabase
+          .from('rma_cases')
+          .update(fallbackPayload)
+          .eq('id', id)
+          .select('*')
+          .single();
+        updatedCase = fallbackUpdate.data;
+        updateError = fallbackUpdate.error;
+        if (updateError || !updatedCase) {
+          return NextResponse.json(
+            { error: updateError?.message || 'Failed to update status' },
+            { status: 500 }
+          );
+        }
+      }
+    }
+    if (!updatedCase) {
       return NextResponse.json(
         { error: updateError?.message || 'Failed to update status' },
         { status: 500 }

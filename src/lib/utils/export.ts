@@ -5,6 +5,7 @@
  */
 
 import type { InventoryItem } from '@/types';
+import { formatCurrency } from '@/lib/utils/pricing';
 
 interface ExportColumn {
   key: keyof InventoryItem | string;
@@ -82,10 +83,7 @@ function formatSyncStatus(status: string | null): string {
   }
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return '';
-  return `$${value.toFixed(2)}`;
-}
+// formatCurrency is imported from @/lib/utils/pricing
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return '';
@@ -110,9 +108,9 @@ function calculateMargin(item: InventoryItem): string {
  * Get nested value from object using dot notation
  */
 function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce((current, key) => 
+  return path.split('.').reduce<unknown>((current, key) => 
     current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined, 
-    obj as Record<string, unknown>
+    obj
   );
 }
 
@@ -146,7 +144,7 @@ export function inventoryToCSV(
   // Build data rows
   const dataRows = items.map(item => {
     return columns.map(col => {
-      const rawValue = getNestedValue(item as Record<string, unknown>, col.key);
+      const rawValue = getNestedValue(item as unknown as Record<string, unknown>, col.key);
       const value = col.transform ? col.transform(rawValue, item) : rawValue;
       return escapeCSV(value);
     }).join(',');

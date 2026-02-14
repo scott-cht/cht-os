@@ -35,6 +35,15 @@ test.describe('RMA Phase 4 API', () => {
     expect(typeof created.case?.id).toBe('string');
     const caseId = created.case.id as string;
 
+    const prepResponse = await request.patch(`/api/rma/${caseId}`, {
+      data: {
+        received_at: new Date().toISOString(),
+      },
+    });
+    const prepBody = await prepResponse.json();
+    expect(prepResponse.status()).toBe(200);
+    expect(prepBody.success).toBe(true);
+
     const statusResponse = await request.post(`/api/rma/${caseId}/status`, {
       data: {
         status: 'testing',
